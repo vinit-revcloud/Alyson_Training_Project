@@ -1,7 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireDbAuth } from "@/integrations/neon/auth-middleware";
 import { isEmailJobEnabled } from "@/lib/email/email-settings.server";
-import { maybeProcessEmailQueue } from "@/lib/email/queue-process.server";
 
 interface OnAssignedInput {
   assignmentId: string;
@@ -27,18 +26,8 @@ export const onFailureRetake = createServerFn({ method: "POST" })
   .middleware([requireDbAuth])
   .inputValidator((d: OnAssignedInput) => d)
   .handler(async ({ data }) => {
-    if (!(await isEmailJobEnabled("failure_retake"))) {
-      return { ok: true, queued: 0, skipped: true };
-    }
-    const { supabaseAdmin } = await import("@/integrations/neon/client.server");
-    const { dispatch } = await import("./triggers.server");
-    const queued = await dispatch(supabaseAdmin, {
-      templateKey: "failure_retake",
-      assignmentId: data.assignmentId,
-      audiences: ["learner"],
-      skipJobCheck: true,
-    });
-    await maybeProcessEmailQueue();
+    const { notifyRetakeAssignment } = await import("@/lib/email/assignment-notify.server");
+    const queued = await notifyRetakeAssignment(data.assignmentId);
     return { ok: true, queued };
   });
 
@@ -57,7 +46,6 @@ export const onTestCompleted = createServerFn({ method: "POST" })
       audiences: ["hr", "ceo"],
       skipJobCheck: true,
     });
-    await maybeProcessEmailQueue();
     return { ok: true, queued };
   });
 

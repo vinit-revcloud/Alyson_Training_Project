@@ -46,6 +46,7 @@ import { Route as ApiPublicHooksWeeklySummaryRouteImport } from './routes/api/pu
 import { Route as ApiPublicHooksRetryFailedRouteImport } from './routes/api/public/hooks/retry-failed'
 import { Route as ApiPublicHooksEscalationsRouteImport } from './routes/api/public/hooks/escalations'
 import { Route as ApiPublicHooksDailyRemindersRouteImport } from './routes/api/public/hooks/daily-reminders'
+import { Route as ApiInternalEmailSendResultRouteImport } from './routes/api/internal/email/send-result'
 import { Route as ApiInternalEmailProcessRouteImport } from './routes/api/internal/email/process'
 import { Route as ApiInternalCronTickRouteImport } from './routes/api/internal/cron/tick'
 import { Route as ApiInternalAssetsUploadRouteImport } from './routes/api/internal/assets/upload'
@@ -242,6 +243,12 @@ const ApiPublicHooksDailyRemindersRoute =
     path: '/api/public/hooks/daily-reminders',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiInternalEmailSendResultRoute =
+  ApiInternalEmailSendResultRouteImport.update({
+    id: '/api/internal/email/send-result',
+    path: '/api/internal/email/send-result',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiInternalEmailProcessRoute = ApiInternalEmailProcessRouteImport.update({
   id: '/api/internal/email/process',
   path: '/api/internal/email/process',
@@ -300,6 +307,7 @@ export interface FileRoutesByFullPath {
   '/api/internal/assets/upload': typeof ApiInternalAssetsUploadRoute
   '/api/internal/cron/tick': typeof ApiInternalCronTickRoute
   '/api/internal/email/process': typeof ApiInternalEmailProcessRoute
+  '/api/internal/email/send-result': typeof ApiInternalEmailSendResultRoute
   '/api/public/hooks/daily-reminders': typeof ApiPublicHooksDailyRemindersRoute
   '/api/public/hooks/escalations': typeof ApiPublicHooksEscalationsRoute
   '/api/public/hooks/retry-failed': typeof ApiPublicHooksRetryFailedRoute
@@ -339,6 +347,7 @@ export interface FileRoutesByTo {
   '/api/internal/assets/upload': typeof ApiInternalAssetsUploadRoute
   '/api/internal/cron/tick': typeof ApiInternalCronTickRoute
   '/api/internal/email/process': typeof ApiInternalEmailProcessRoute
+  '/api/internal/email/send-result': typeof ApiInternalEmailSendResultRoute
   '/api/public/hooks/daily-reminders': typeof ApiPublicHooksDailyRemindersRoute
   '/api/public/hooks/escalations': typeof ApiPublicHooksEscalationsRoute
   '/api/public/hooks/retry-failed': typeof ApiPublicHooksRetryFailedRoute
@@ -383,6 +392,7 @@ export interface FileRoutesById {
   '/api/internal/assets/upload': typeof ApiInternalAssetsUploadRoute
   '/api/internal/cron/tick': typeof ApiInternalCronTickRoute
   '/api/internal/email/process': typeof ApiInternalEmailProcessRoute
+  '/api/internal/email/send-result': typeof ApiInternalEmailSendResultRoute
   '/api/public/hooks/daily-reminders': typeof ApiPublicHooksDailyRemindersRoute
   '/api/public/hooks/escalations': typeof ApiPublicHooksEscalationsRoute
   '/api/public/hooks/retry-failed': typeof ApiPublicHooksRetryFailedRoute
@@ -428,6 +438,7 @@ export interface FileRouteTypes {
     | '/api/internal/assets/upload'
     | '/api/internal/cron/tick'
     | '/api/internal/email/process'
+    | '/api/internal/email/send-result'
     | '/api/public/hooks/daily-reminders'
     | '/api/public/hooks/escalations'
     | '/api/public/hooks/retry-failed'
@@ -467,6 +478,7 @@ export interface FileRouteTypes {
     | '/api/internal/assets/upload'
     | '/api/internal/cron/tick'
     | '/api/internal/email/process'
+    | '/api/internal/email/send-result'
     | '/api/public/hooks/daily-reminders'
     | '/api/public/hooks/escalations'
     | '/api/public/hooks/retry-failed'
@@ -510,6 +522,7 @@ export interface FileRouteTypes {
     | '/api/internal/assets/upload'
     | '/api/internal/cron/tick'
     | '/api/internal/email/process'
+    | '/api/internal/email/send-result'
     | '/api/public/hooks/daily-reminders'
     | '/api/public/hooks/escalations'
     | '/api/public/hooks/retry-failed'
@@ -542,6 +555,7 @@ export interface RootRouteChildren {
   ApiInternalAssetsUploadRoute: typeof ApiInternalAssetsUploadRoute
   ApiInternalCronTickRoute: typeof ApiInternalCronTickRoute
   ApiInternalEmailProcessRoute: typeof ApiInternalEmailProcessRoute
+  ApiInternalEmailSendResultRoute: typeof ApiInternalEmailSendResultRoute
   ApiPublicHooksDailyRemindersRoute: typeof ApiPublicHooksDailyRemindersRoute
   ApiPublicHooksEscalationsRoute: typeof ApiPublicHooksEscalationsRoute
   ApiPublicHooksRetryFailedRoute: typeof ApiPublicHooksRetryFailedRoute
@@ -809,6 +823,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicHooksDailyRemindersRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/internal/email/send-result': {
+      id: '/api/internal/email/send-result'
+      path: '/api/internal/email/send-result'
+      fullPath: '/api/internal/email/send-result'
+      preLoaderRoute: typeof ApiInternalEmailSendResultRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/internal/email/process': {
       id: '/api/internal/email/process'
       path: '/api/internal/email/process'
@@ -948,6 +969,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiInternalAssetsUploadRoute: ApiInternalAssetsUploadRoute,
   ApiInternalCronTickRoute: ApiInternalCronTickRoute,
   ApiInternalEmailProcessRoute: ApiInternalEmailProcessRoute,
+  ApiInternalEmailSendResultRoute: ApiInternalEmailSendResultRoute,
   ApiPublicHooksDailyRemindersRoute: ApiPublicHooksDailyRemindersRoute,
   ApiPublicHooksEscalationsRoute: ApiPublicHooksEscalationsRoute,
   ApiPublicHooksRetryFailedRoute: ApiPublicHooksRetryFailedRoute,

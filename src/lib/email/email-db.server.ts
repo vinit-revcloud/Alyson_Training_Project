@@ -51,6 +51,25 @@ export async function findNotificationLogByIdempotency(
   return rows[0] ?? null;
 }
 
+export async function findPendingQueueByAssignmentAndType(
+  assignmentId: string,
+  emailType: string,
+  queueName = "transactional_emails",
+): Promise<{ id: number } | null> {
+  const pool = getPgPool();
+  const { rows } = await pool.query<{ id: string }>(
+    `SELECT id FROM email_queue
+     WHERE queue_name = $1
+       AND archived_at IS NULL
+       AND payload->>'assignment_id' = $2
+       AND payload->>'email_type' = $3
+     LIMIT 1`,
+    [queueName, assignmentId, emailType],
+  );
+  const row = rows[0];
+  return row ? { id: Number(row.id) } : null;
+}
+
 export async function insertNotificationLog(input: {
   user_id?: string | null;
   assignment_id?: string | null;

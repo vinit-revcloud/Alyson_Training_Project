@@ -501,11 +501,23 @@ function AnalyticsPage() {
               Notifications <ArrowRight className="inline h-3 w-3" />
             </Link>
           </div>
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-            <MetricCard label="Sent" value={String(emailStats?.sent ?? 0)} icon={Send} sub="delivered" />
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-7">
+            <MetricCard label="Sent" value={String(emailStats?.sent ?? 0)} icon={Send} sub="notification_log" />
             <MetricCard label="Pending" value={String(emailStats?.pending ?? 0)} icon={Mail} sub="queued" />
             <MetricCard label="Failed" value={String(emailStats?.failed ?? 0)} icon={AlertTriangle} sub="errors" />
-            <MetricCard label="Queue depth" value={String(emailStats?.queueDepth ?? 0)} icon={Clock} sub="awaiting send" />
+            <MetricCard label="Queue depth" value={String(emailStats?.queueDepth ?? 0)} icon={Clock} sub="email_queue" />
+            <MetricCard
+              label="At risk"
+              value={String(emailStats?.learnersAtRisk ?? 0)}
+              icon={AlertTriangle}
+              sub="overdue learners"
+            />
+            <MetricCard
+              label="Retakes"
+              value={String(emailStats?.retakeEligible ?? 0)}
+              icon={Clock}
+              sub="eligible"
+            />
             <MetricCard
               label="Suppressed"
               value={String(emailStats?.suppressedCount ?? 0)}

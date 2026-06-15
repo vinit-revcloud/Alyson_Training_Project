@@ -1,3 +1,9 @@
+/**
+ * Legacy in-app SES drain — replaced by AWS Step Functions workflow.
+ * Assignment workflow emails are enqueue-only; Step Functions + Lambda send via SES.
+ * Use only for manual local testing: Settings → Process queue, /api/internal/email/process,
+ * or when EMAIL_AUTO_PROCESS=1 in development.
+ */
 import { sesSend, SesSendError } from "./ses-send";
 import {
   countFailedSendLogs,

@@ -1,214 +1,293 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { toast } from "sonner";
 import {
-  Mail,
-  Clock,
-  AlertTriangle,
-  ShieldAlert,
-  RefreshCw,
-  Send,
-  CheckCircle2,
-} from "lucide-react";
-import { simulateEmailScenario } from "@/lib/email-testing.functions";
-import { Link } from "@tanstack/react-router";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { toast } from "sonner";
+import { Mail, Send, Loader2, CheckCircle2, AlertCircle, Copy } from "lucide-react";
+import { listAssignmentsFn } from "@/lib/assignments.functions";
+import { enqueueAssignmentEmailFn } from "@/lib/email/enqueue-assignment-email.functions";
+import {
+  ASSIGNMENT_EMAIL_TYPES,
+  type AssignmentEmailType,
+  type EnqueueAssignmentEmailResult,
+} from "@/lib/email/enqueue-assignment-email.shared";
 
 export const Route = createFileRoute("/email-testing")({
   head: () => ({ meta: [{ title: "Email Testing — Alyson" }] }),
   component: EmailTestingPage,
 });
 
-const SCENARIOS = [
-  {
-    id: "assignment_sent",
-    label: "Send assignment email",
-    description: "Triggers a new-assignment notification from training.group@cintara.ai",
-    icon: Send,
+const EMAIL_TYPE_LABELS: Record<AssignmentEmailType, string> = {
+  initial: "Initial assignment",
+  reminder_day7: "Day 7 reminder",
+  reminder_day14: "Day 14 reminder",
+  retake: "Retake offer",
+  escalation_day30: "Day 30 escalation",
+};
+
+type EnqueueStatus = "queued" | "duplicate_pending" | "duplicate_logged" | "error";
+
+function resultStatus(result: EnqueueAssignmentEmailResult): {
+  status: EnqueueStatus;
+  message: string;
+  detail?: string;
+} {
+  if (!result.ok) {
+    return { status: "error", message: "Enqueue failed", detail: result.error };
+  }
+  if (result.queued) {
+    return {
+      status: "queued",
+      message: "Email queued",
+      detail: `queueId=${result.queueId} · notificationLogId=${result.notificationLogId}`,
+    };
+  }
+  if (result.reason === "duplicate_pending") {
+    return {
+      status: "duplicate_pending",
+      message: "Duplicate pending",
+      detail: result.queueId != null ? `Existing queue id: ${result.queueId}` : undefined,
+    };
+  }
+  return {
+    status: "duplicate_logged",
+    message: "Already logged",
+    detail: result.notificationLogId
+      ? `notificationLogId=${result.notificationLogId}`
+      : "Idempotency key already exists in notification_log",
+  };
+}
+
+const STATUS_STYLES: Record<
+  EnqueueStatus,
+  { badge: string; icon: typeof CheckCircle2 }
+> = {
+  queued: {
+    badge: "border-success/30 bg-success/10 text-success",
+    icon: CheckCircle2,
   },
-  {
-    id: "reminder_day_7",
-    label: "Day 7 reminder",
-    description: "Simulates the 7-day overdue reminder",
-    icon: Clock,
+  duplicate_pending: {
+    badge: "border-amber-500/30 bg-amber-500/10 text-amber-700",
+    icon: Copy,
   },
-  {
-    id: "reminder_day_14",
-    label: "Day 14 reminder",
-    description: "Simulates the 14-day overdue reminder",
-    icon: Clock,
+  duplicate_logged: {
+    badge: "border-amber-500/30 bg-amber-500/10 text-amber-700",
+    icon: Copy,
   },
-  {
-    id: "reminder_day_30",
-    label: "Day 30 reminder",
-    description: "Simulates the 30-day final reminder",
-    icon: AlertTriangle,
+  error: {
+    badge: "border-destructive/30 bg-destructive/10 text-destructive",
+    icon: AlertCircle,
   },
-  {
-    id: "failure_retake",
-    label: "Failure + retake offer",
-    description: "Simulates a failed attempt and offers a retake",
-    icon: RefreshCw,
-  },
-  {
-    id: "escalation_hr",
-    label: "Escalate to HR",
-    description: "Routes an escalation notification to HR",
-    icon: ShieldAlert,
-  },
-  {
-    id: "escalation_ceo",
-    label: "Escalate to CEO",
-    description: "Routes a critical escalation to leadership",
-    icon: ShieldAlert,
-  },
-] as const;
+};
 
 function EmailTestingPage() {
-  const [learnerEmail, setLearnerEmail] = useState("test.learner@alyson.io");
-  const [learnerName, setLearnerName] = useState("Test Learner");
-  const [assignmentTitle, setAssignmentTitle] = useState(
-    "DS Foundations · Final Test",
+  const [assignmentId, setAssignmentId] = useState("");
+  const [emailType, setEmailType] = useState<AssignmentEmailType>("initial");
+  const [lastResult, setLastResult] = useState<ReturnType<typeof resultStatus> | null>(
+    null,
   );
-  const [lastRun, setLastRun] = useState<Record<string, string>>({});
   const queryClient = useQueryClient();
 
-  const simulate = useServerFn(simulateEmailScenario);
+  const loadAssignments = useServerFn(listAssignmentsFn);
+  const enqueueEmail = useServerFn(enqueueAssignmentEmailFn);
+
+  const { data: assignments = [], isLoading: loadingAssignments } = useQuery({
+    queryKey: ["assignments", "list"],
+    queryFn: () => loadAssignments(),
+  });
+
+  const selected = assignments.find((a) => a.id === assignmentId);
+
   const mutation = useMutation({
-    mutationFn: (scenario: (typeof SCENARIOS)[number]["id"]) =>
-      simulate({
+    mutationFn: async () => {
+      if (!selected) throw new Error("Select an assignment");
+      return enqueueEmail({
         data: {
-          scenario,
-          learnerEmail,
-          learnerName,
-          assignmentTitle,
+          user_id: selected.learner_user_id,
+          assignment_id: selected.id,
+          email_type: emailType,
         },
-      }),
-    onSuccess: (_data, scenario) => {
-      setLastRun((s) => ({ ...s, [scenario]: new Date().toLocaleTimeString() }));
-      queryClient.invalidateQueries({ queryKey: ["email-notifications"] });
-      toast.success("Test email logged", {
-        description: "View it on the Notifications dashboard.",
       });
     },
-    onError: (e: Error) =>
-      toast.error("Simulation failed", { description: e.message }),
+    onSuccess: (result) => {
+      const parsed = resultStatus(result);
+      setLastResult(parsed);
+      queryClient.invalidateQueries({ queryKey: ["email-notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["email-metrics"] });
+
+      if (parsed.status === "queued") {
+        toast.success(parsed.message, { description: parsed.detail });
+      } else if (parsed.status === "error") {
+        toast.error(parsed.message, { description: parsed.detail });
+      } else {
+        toast.info(parsed.message, { description: parsed.detail });
+      }
+    },
+    onError: (e: Error) => {
+      const parsed = { status: "error" as const, message: "Request failed", detail: e.message };
+      setLastResult(parsed);
+      toast.error(parsed.message, { description: e.message });
+    },
   });
+
+  const StatusIcon = lastResult ? STATUS_STYLES[lastResult.status].icon : CheckCircle2;
 
   return (
     <AdminLayout
       title="Email Testing & Verification"
-      subtitle="Trigger end-to-end scenarios for assignment, reminder, retake and escalation emails"
+      subtitle="Enqueue assignment workflow emails for AWS Step Functions — no in-app SES send"
     >
       <div className="space-y-6">
         <Card className="rounded-xl border-border bg-card p-5 shadow-soft">
-          <h3 className="mb-3 text-sm font-semibold text-foreground">
-            Test case parameters
-          </h3>
-          <div className="grid gap-4 md:grid-cols-3">
+          <h3 className="mb-4 text-sm font-semibold text-foreground">Enqueue test email</h3>
+          <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="learnerEmail" className="text-xs">
-                Learner email
-              </Label>
-              <Input
-                id="learnerEmail"
-                type="email"
-                value={learnerEmail}
-                onChange={(e) => setLearnerEmail(e.target.value)}
-              />
+              <Label className="text-xs">Assignment</Label>
+              <Select
+                value={assignmentId}
+                onValueChange={(v) => {
+                  setAssignmentId(v);
+                  setLastResult(null);
+                }}
+                disabled={loadingAssignments}
+              >
+                <SelectTrigger>
+                  <SelectValue
+                    placeholder={loadingAssignments ? "Loading…" : "Select assignment"}
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {assignments.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>
+                      {a.learner?.display_name ?? a.learner?.email ?? "Learner"} ·{" "}
+                      {a.assessment.title} ({a.status})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
+
             <div className="space-y-1.5">
-              <Label htmlFor="learnerName" className="text-xs">
-                Learner name
-              </Label>
-              <Input
-                id="learnerName"
-                value={learnerName}
-                onChange={(e) => setLearnerName(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="assignmentTitle" className="text-xs">
-                Assignment title
-              </Label>
-              <Input
-                id="assignmentTitle"
-                value={assignmentTitle}
-                onChange={(e) => setAssignmentTitle(e.target.value)}
-              />
+              <Label className="text-xs">Email type</Label>
+              <Select
+                value={emailType}
+                onValueChange={(v) => {
+                  setEmailType(v as AssignmentEmailType);
+                  setLastResult(null);
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ASSIGNMENT_EMAIL_TYPES.map((type) => (
+                    <SelectItem key={type} value={type}>
+                      {EMAIL_TYPE_LABELS[type]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
+
+          {selected && (
+            <div className="mt-4 rounded-lg border border-border bg-muted/30 p-3 text-[12px] text-muted-foreground">
+              <div>
+                <span className="font-medium text-foreground">Learner:</span>{" "}
+                {selected.learner?.display_name ?? "—"} ({selected.learner?.email ?? "no email"})
+              </div>
+              <div>
+                <span className="font-medium text-foreground">Assessment:</span>{" "}
+                {selected.assessment.title}
+              </div>
+              <div>
+                <span className="font-medium text-foreground">user_id:</span>{" "}
+                <code className="text-[11px]">{selected.learner_user_id}</code>
+              </div>
+              <div>
+                <span className="font-medium text-foreground">assignment_id:</span>{" "}
+                <code className="text-[11px]">{selected.id}</code>
+              </div>
+            </div>
+          )}
+
           <p className="mt-3 text-[11px] text-muted-foreground">
             Sender:{" "}
-            <span className="font-mono text-foreground">
-              training.group@cintara.ai
-            </span>{" "}
-            · Each scenario writes a row to the email log so the dashboard
-            metrics update in real time.
+            <span className="font-mono text-foreground">training.group@cintara.ai</span> · Writes
+            to <code className="text-[11px]">email_queue</code> +{" "}
+            <code className="text-[11px]">notification_log</code> for Step Functions / SES.
           </p>
+
+          <Button
+            className="mt-4"
+            disabled={!assignmentId || mutation.isPending}
+            onClick={() => mutation.mutate()}
+          >
+            {mutation.isPending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Enqueueing…
+              </>
+            ) : (
+              <>
+                <Send className="mr-2 h-4 w-4" />
+                Enqueue email
+              </>
+            )}
+          </Button>
         </Card>
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {SCENARIOS.map((s) => {
-            const Icon = s.icon;
-            const ran = lastRun[s.id];
-            const pending =
-              mutation.isPending && mutation.variables === s.id;
-            return (
-              <Card
-                key={s.id}
-                className="flex flex-col gap-3 rounded-xl border-border bg-card p-5 shadow-soft transition hover:shadow-glow"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-md bg-accent text-primary">
-                    <Icon className="h-4 w-4" strokeWidth={1.75} />
-                  </div>
-                  {ran && (
-                    <Badge
-                      variant="outline"
-                      className="border-success/30 bg-success/10 text-[10px] text-success"
-                    >
-                      <CheckCircle2 className="mr-1 h-3 w-3" />
-                      Sent {ran}
-                    </Badge>
-                  )}
+        {lastResult && (
+          <Card className="rounded-xl border-border bg-card p-5 shadow-soft">
+            <div className="flex items-start gap-3">
+              <StatusIcon
+                className={`mt-0.5 h-5 w-5 ${
+                  lastResult.status === "queued"
+                    ? "text-success"
+                    : lastResult.status === "error"
+                      ? "text-destructive"
+                      : "text-amber-600"
+                }`}
+              />
+              <div className="flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-semibold text-foreground">Last result</span>
+                  <Badge
+                    variant="outline"
+                    className={`text-[10px] ${STATUS_STYLES[lastResult.status].badge}`}
+                  >
+                    {lastResult.status}
+                  </Badge>
                 </div>
-                <div>
-                  <div className="text-sm font-semibold text-foreground">
-                    {s.label}
-                  </div>
-                  <p className="mt-1 text-[11px] text-muted-foreground">
-                    {s.description}
+                <p className="mt-1 text-sm text-foreground">{lastResult.message}</p>
+                {lastResult.detail && (
+                  <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+                    {lastResult.detail}
                   </p>
-                </div>
-                <Button
-                  size="sm"
-                  className="mt-auto"
-                  disabled={pending || !learnerEmail}
-                  onClick={() => mutation.mutate(s.id)}
-                >
-                  {pending ? "Running…" : "Run scenario"}
-                </Button>
-              </Card>
-            );
-          })}
-        </div>
+                )}
+              </div>
+            </div>
+          </Card>
+        )}
 
         <Card className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-border bg-card p-5 shadow-soft">
           <div className="flex items-center gap-2 text-sm">
             <Mail className="h-4 w-4 text-primary" />
-            <span className="text-foreground font-medium">
-              Verify on the Notifications dashboard
-            </span>
+            <span className="font-medium text-foreground">Verify on the Notifications dashboard</span>
             <span className="text-[11px] text-muted-foreground">
-              Cards, delivery failures and escalation panels reflect each run.
+              Queue depth and send logs update after Step Functions processes the row.
             </span>
           </div>
           <Button asChild variant="outline" size="sm">

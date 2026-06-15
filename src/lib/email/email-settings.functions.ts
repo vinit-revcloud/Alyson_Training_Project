@@ -50,6 +50,7 @@ export const fetchEmailHealthFn = createServerFn({ method: "GET" })
     return fetchEmailHealthSummary();
   });
 
+/** Manual dev queue drain (Settings / Notifications). Production uses AWS Step Functions. */
 export const processEmailQueueFn = createServerFn({ method: "POST" })
   .middleware([requireDbAuth])
   .handler(async () => {
@@ -71,5 +72,8 @@ export const fetchEmailDeliverySummaryFn = createServerFn({ method: "GET" })
       sent: metrics.sent,
       pending: metrics.pending,
       failed: metrics.failed,
+      learnersAtRisk: metrics.learnersAtRisk,
+      retakeEligible: metrics.retakeEligible,
+      escalationsSent: metrics.escalationsSent,
     };
   });

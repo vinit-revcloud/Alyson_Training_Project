@@ -58,6 +58,7 @@ export const createManualAssignmentFn = createServerFn({ method: "POST" })
     const row = await createManualAssignmentInDb({ ...data, assignedBy: context.userId });
     const { notifyNewAssignments } = await import("@/lib/email/assignment-notify.server");
     const emailsQueued = await notifyNewAssignments([row.id]);
+    console.info(`[assignments] createManualAssignment: emailsQueued=${emailsQueued}`);
     return { ...row, emailsQueued };
   });
 
@@ -68,6 +69,9 @@ export const autoAssignCourseToDepartmentFn = createServerFn({ method: "POST" })
     const result = await autoAssignCourseToDepartmentInDb(data.courseId, data.department);
     const { notifyNewAssignments } = await import("@/lib/email/assignment-notify.server");
     const emailsQueued = await notifyNewAssignments(result.newAssignmentIds);
+    console.info(
+      `[assignments] autoAssignCourseToDepartment: emailsQueued=${emailsQueued} assignments=${result.newAssignmentIds.length}`,
+    );
     return { ...result, emailsQueued };
   });
 
@@ -111,6 +115,7 @@ export const assignAssessmentFn = createServerFn({ method: "POST" })
     const ids = await assignAssessmentInDb({ ...data, assignedBy: context.userId });
     const { notifyNewAssignments } = await import("@/lib/email/assignment-notify.server");
     const emailsQueued = await notifyNewAssignments(ids);
+    console.info(`[assignments] assignAssessment: emailsQueued=${emailsQueued} count=${ids.length}`);
     return { count: ids.length, assignmentIds: ids, emailsQueued };
   });
 

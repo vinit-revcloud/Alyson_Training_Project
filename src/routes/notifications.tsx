@@ -21,6 +21,7 @@ import {
   ShieldAlert,
   CheckCircle2,
   XCircle,
+  RefreshCw,
 } from "lucide-react";
 import { fetchEmailMetrics, type EmailStatus } from "@/lib/notifications-api";
 import { getAssignmentMetrics } from "@/lib/test-assignments-api";
@@ -66,7 +67,7 @@ function NotificationsPage() {
   const emails = useQuery({
     queryKey: ["email-notifications"],
     queryFn: fetchEmailMetrics,
-    refetchInterval: 60 * 60_000,
+    refetchInterval: 30_000,
   });
   const health = useQuery({
     queryKey: ["email-health"],
@@ -96,7 +97,7 @@ function NotificationsPage() {
   return (
     <AdminLayout
       title="Notifications & Email Activity"
-      subtitle="Reminder, escalation and delivery status across the platform · auto-refreshes hourly"
+      subtitle="Enqueue-only workflow — metrics from notification_log & email_send_log · refreshes every 30s"
       actions={
         <div className="flex gap-2">
           <Link
@@ -118,7 +119,7 @@ function NotificationsPage() {
             disabled={processMut.isPending}
             onClick={() => processMut.mutate()}
           >
-            {processMut.isPending ? "Sending…" : "Process queue"}
+            {processMut.isPending ? "Draining…" : "Process queue (dev)"}
           </Button>
         </div>
       }
@@ -135,7 +136,7 @@ function NotificationsPage() {
               <div className="mt-1 text-2xl font-semibold">{h.suppressedCount}</div>
             </Card>
             <Card className="rounded-xl border-border bg-card p-4">
-              <div className="text-[11px] uppercase text-muted-foreground">Last state update</div>
+              <div className="text-[11px] uppercase text-muted-foreground">Last SES send</div>
               <div className="mt-1 text-sm font-medium">
                 {h.lastProcessed ? new Date(h.lastProcessed).toLocaleString() : "—"}
               </div>
@@ -178,26 +179,62 @@ function NotificationsPage() {
           </div>
         </section>
 
-        {/* Email metrics */}
+        {/* Workflow metrics */}
+        <section>
+          <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            Email workflow
+          </h2>
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+            <MetricCard
+              label="Learners at risk"
+              value={String(m?.learnersAtRisk ?? 0)}
+              icon={AlertTriangle}
+              trend="down"
+              sub="Overdue & incomplete"
+            />
+            <MetricCard
+              label="Retake eligible"
+              value={String(m?.retakeEligible ?? 0)}
+              icon={RefreshCw}
+              sub="Failed with retries left"
+            />
+            <MetricCard
+              label="Day 30 escalations"
+              value={String(m?.escalationsSent ?? 0)}
+              icon={ShieldAlert}
+              sub="Sent to HR/leadership"
+            />
+            <MetricCard
+              label="Queued / pending"
+              value={String(m?.pending ?? 0)}
+              icon={Clock}
+              sub={`${h?.queueDepth ?? 0} in email_queue`}
+            />
+          </div>
+        </section>
+
+        {/* Email delivery */}
         <section>
           <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
             Email delivery
           </h2>
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <MetricCard
-              label="Total sent"
+              label="Total logged"
               value={String(m?.total ?? 0)}
               icon={Mail}
-              sub="Last 500 events"
+              sub="notification_log rows"
             />
             <MetricCard
               label="Delivered"
               value={String(m?.sent ?? 0)}
               icon={Send}
               sub={
-                m?.total
-                  ? `${Math.round(((m.sent ?? 0) / m.total) * 100)}% success`
-                  : "—"
+                m?.sendLogSent
+                  ? `${m.sendLogSent} confirmed in send_log`
+                  : m?.total
+                    ? `${Math.round(((m.sent ?? 0) / m.total) * 100)}% sent`
+                    : "—"
               }
             />
             <MetricCard
@@ -205,14 +242,14 @@ function NotificationsPage() {
               value={String(m?.bounced ?? 0)}
               icon={XCircle}
               trend="down"
-              sub="Hard / soft bounces"
+              sub="Bounces & complaints"
             />
             <MetricCard
-              label="Failed / queued"
-              value={String((m?.failed ?? 0) + (m?.pending ?? 0))}
+              label="Failed"
+              value={String(m?.failed ?? 0)}
               icon={AlertTriangle}
               trend="down"
-              sub={`${m?.pending ?? 0} pending retry`}
+              sub={`${m?.pending ?? 0} awaiting send`}
             />
           </div>
         </section>

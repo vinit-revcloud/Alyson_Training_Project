@@ -23,11 +23,20 @@ export interface EmailLogRow {
 }
 
 export interface EmailMetrics {
+  /** All rows in notification_log. */
   total: number;
   sent: number;
   pending: number;
   failed: number;
   bounced: number;
+  /** Confirmed sends recorded in email_send_log (Lambda / SES callback). */
+  sendLogSent: number;
+  /** Assignments overdue and still incomplete. */
+  learnersAtRisk: number;
+  /** Failed attempts with retries remaining. */
+  retakeEligible: number;
+  /** Day-30 escalations successfully sent. */
+  escalationsSent: number;
   recent: EmailLogRow[];
   escalations: EmailLogRow[];
 }

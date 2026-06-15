@@ -1,6 +1,6 @@
 import { CronExpressionParser } from "cron-parser";
 import { getPgPool } from "@/lib/pg.server";
-import { processEmailQueue } from "@/lib/email/process-queue";
+import { processEmailQueue } from "@/lib/email/process-queue"; // dev manual drain only
 import type { JobKey } from "@/lib/email/schedules-api";
 import {
   runDailyReminders,
@@ -111,7 +111,11 @@ export async function runCronTick(): Promise<CronTickResult> {
     }
   }
 
-  const queue = await processEmailQueue();
+  // Production: enqueue-only — AWS Step Functions drains email_queue and sends via SES.
+  const queue =
+    process.env.EMAIL_AUTO_PROCESS === "1"
+      ? await processEmailQueue()
+      : { processed: 0, stopped: "enqueue_only_aws_step_functions" };
 
   return {
     ok: true,

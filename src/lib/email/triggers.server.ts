@@ -1,8 +1,6 @@
 import { renderTemplate, type PlaceholderKey } from "./render";
 import { getUserEmail } from "@/lib/user-email";
 import { isEmailJobEnabled, type EmailJobKey } from "@/lib/email/email-settings.server";
-import { maybeProcessEmailQueue } from "@/lib/email/queue-process.server";
-
 async function appUrl(path: string): Promise<string> {
   const { getServerConfig } = await import("@/lib/config.server");
   const base = getServerConfig().appBaseUrl.replace(/\/$/, "");
@@ -205,7 +203,6 @@ export async function runDailyReminders(): Promise<{ queued: number }> {
     });
   }
   await recordRun("reminder_daily", queued);
-  await maybeProcessEmailQueue();
   return { queued };
 }
 
@@ -290,7 +287,6 @@ export async function runEscalations(): Promise<{
   }
 
   await recordRun("escalation", queued);
-  await maybeProcessEmailQueue();
   return { queued, paused, deactivated };
 }
 
@@ -360,7 +356,6 @@ export async function runWeeklyCeoSummary(): Promise<{ queued: number }> {
   }
 
   await recordRun("weekly_ceo_summary", queued);
-  await maybeProcessEmailQueue();
   return { queued };
 }
 
@@ -460,14 +455,14 @@ export async function sendInviteEmail(data: {
   }
 
   await updateNotificationLog(logId, { status: "queued", provider_message_id: messageId });
-  const { processEmailQueue } = await import("@/lib/email/process-queue");
   let processed = 0;
   if (process.env.EMAIL_AUTO_PROCESS === "1") {
+    const { processEmailQueue } = await import("@/lib/email/process-queue");
     try {
       const result = await processEmailQueue();
       processed = result.processed;
     } catch (err) {
-      console.warn("[email] invite auto-process failed", err);
+      console.warn("[email] invite dev auto-process failed", err);
     }
   }
   return { ok: true, queued: 1, processed };

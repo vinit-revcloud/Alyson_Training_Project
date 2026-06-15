@@ -198,7 +198,5 @@ export const sendTemplatedEmail = createServerFn({ method: "POST" })
       queued += 1;
     }
 
-    const { maybeProcessEmailQueue } = await import("@/lib/email/queue-process.server");
-    await maybeProcessEmailQueue();
     return { ok: true, queued };
   });
