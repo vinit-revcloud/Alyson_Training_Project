@@ -174,7 +174,8 @@ function AssessmentsPage() {
       if (q && !r.title.toLowerCase().includes(q) && !(r.course_title ?? "").toLowerCase().includes(q)) return false;
       if (filterCourse !== ALL && r.course_id !== filterCourse) return false;
       if (filterType !== ALL && r.type !== filterType) return false;
-      if (filterStatus !== ALL && r.status !== filterStatus) return false;
+      if (filterStatus !== ALL && filterStatus !== "needs-review" && r.status !== filterStatus) return false;
+      if (filterStatus === "needs-review" && r.class_status !== "in-review") return false;
       if (filterRole !== ALL && r.role !== filterRole) return false;
       return true;
     });
@@ -329,6 +330,7 @@ function AssessmentsPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={ALL}>All statuses</SelectItem>
+                  <SelectItem value="needs-review">Needs class review</SelectItem>
                   <SelectItem value="published">Open</SelectItem>
                   <SelectItem value="validated">Validated</SelectItem>
                   <SelectItem value="draft">Draft</SelectItem>

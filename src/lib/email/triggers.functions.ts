@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { requireDbAuth } from "@/integrations/neon/auth-middleware";
+import { requireContentManager } from "@/integrations/neon/auth-middleware";
 import { isEmailJobEnabled } from "@/lib/email/email-settings.server";
 
 interface OnAssignedInput {
@@ -14,7 +14,7 @@ interface InviteEmailInput {
 }
 
 export const onAssignmentCreated = createServerFn({ method: "POST" })
-  .middleware([requireDbAuth])
+  .middleware([requireContentManager])
   .inputValidator((d: OnAssignedInput) => d)
   .handler(async ({ data }) => {
     const { notifyNewAssignments } = await import("@/lib/email/assignment-notify.server");
@@ -23,7 +23,7 @@ export const onAssignmentCreated = createServerFn({ method: "POST" })
   });
 
 export const onFailureRetake = createServerFn({ method: "POST" })
-  .middleware([requireDbAuth])
+  .middleware([requireContentManager])
   .inputValidator((d: OnAssignedInput) => d)
   .handler(async ({ data }) => {
     const { notifyRetakeAssignment } = await import("@/lib/email/assignment-notify.server");
@@ -32,7 +32,7 @@ export const onFailureRetake = createServerFn({ method: "POST" })
   });
 
 export const onTestCompleted = createServerFn({ method: "POST" })
-  .middleware([requireDbAuth])
+  .middleware([requireContentManager])
   .inputValidator((d: OnAssignedInput) => d)
   .handler(async ({ data }) => {
     if (!(await isEmailJobEnabled("test_completed"))) {
@@ -50,7 +50,7 @@ export const onTestCompleted = createServerFn({ method: "POST" })
   });
 
 export const onInviteCreated = createServerFn({ method: "POST" })
-  .middleware([requireDbAuth])
+  .middleware([requireContentManager])
   .inputValidator((d: InviteEmailInput) => d)
   .handler(async ({ data }) => {
     const { sendInviteEmail } = await import("./triggers.server");

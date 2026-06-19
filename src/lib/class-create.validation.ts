@@ -52,11 +52,15 @@ export interface ValidationIssue {
 /** Step 0–4 wizard validation (blocks Continue + publish). */
 export function validateWizardSteps(input: {
   name: string;
+  parentCourse?: string;
   topics: string[];
   sections: SectionDraftLike[];
 }): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   if (!input.name.trim()) issues.push({ step: 0, message: "Class needs a name" });
+  if (!input.parentCourse?.trim()) {
+    issues.push({ step: 0, message: "Select or enter a parent course" });
+  }
   if (!input.topics.length) issues.push({ step: 1, message: "Assign at least one topic" });
   if (!input.sections.length) {
     issues.push({ step: 2, message: "Add at least one section" });
@@ -98,9 +102,11 @@ export function validateClassForPublish(input: ClassWizardInput): ValidationIssu
 }
 
 /** Minimum check before draft save. */
-export function validateClassForDraft(name: string): ValidationIssue[] {
-  if (!name.trim()) return [{ step: 0, message: "Class needs a name to save as draft" }];
-  return [];
+export function validateClassForDraft(name: string, parentCourse?: string): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  if (!name.trim()) issues.push({ step: 0, message: "Class needs a name to save as draft" });
+  if (!parentCourse?.trim()) issues.push({ step: 0, message: "Select or enter a parent course" });
+  return issues;
 }
 
 export function normalizeTestConfig(test: Partial<TestConfig>): TestConfig {

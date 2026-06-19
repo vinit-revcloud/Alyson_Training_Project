@@ -2,7 +2,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { deepseekChatCompletion } from "@/lib/ai/deepseek";
 import { gatherSectionMaterial } from "@/lib/ai/section-material.server";
-import { requireDbAuth } from "@/integrations/neon/auth-middleware";
+import { requireContentManager } from "@/integrations/neon/auth-middleware";
+import { assertAiRateLimit } from "@/lib/ai-rate-limit.server";
 
 const InputSchema = z.object({
   sectionId: z.string().uuid(),
@@ -21,9 +22,10 @@ const QuestionSchema = z.object({
 });
 
 export const regenerateSectionQuestions = createServerFn({ method: "POST" })
-  .middleware([requireDbAuth])
+  .middleware([requireContentManager])
   .inputValidator((data: unknown) => InputSchema.parse(data))
   .handler(async ({ data, context }) => {
+    assertAiRateLimit(context.userId);
     const { supabase } = context;
 
     await supabase

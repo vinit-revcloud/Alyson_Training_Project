@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireDbAuth } from "@/integrations/neon/auth-middleware";
 import { ALLOWED_EMAIL_DOMAIN } from "@/lib/auth-constants";
+import { workspaceRoleSchema } from "@/lib/workspace-roles.shared";
 import type { InviteRole } from "@/lib/invites.shared";
 import { requireAdminUserId } from "@/lib/auth-token.server";
 import { getServerConfig } from "@/lib/config.server";
@@ -53,7 +54,7 @@ export const listInvitesFn = createServerFn({ method: "POST" })
 
 const CreateInviteInput = z.object({
   email: z.string().email(),
-  role: z.enum(["admin", "trainer", "trainee"]),
+  role: workspaceRoleSchema,
   department: z.string().nullable().optional(),
 });
 
@@ -100,7 +101,7 @@ export const revokeInvitesFn = createServerFn({ method: "POST" })
 export const updateInviteRoleFn = createServerFn({ method: "POST" })
   .middleware([requireDbAuth])
   .inputValidator((data: unknown) =>
-    z.object({ id: z.string().uuid(), role: z.enum(["admin", "trainer", "trainee"]) }).parse(data),
+    z.object({ id: z.string().uuid(), role: workspaceRoleSchema }).parse(data),
   )
   .handler(async ({ data }) => {
     await requireAdminUserId();
@@ -114,7 +115,7 @@ export const updateInvitesRoleFn = createServerFn({ method: "POST" })
     z
       .object({
         ids: z.array(z.string().uuid()),
-        role: z.enum(["admin", "trainer", "trainee"]),
+        role: workspaceRoleSchema,
       })
       .parse(data),
   )

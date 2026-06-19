@@ -27,7 +27,7 @@ export function AdminLayout({
 }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
-  const { session, loading, bootstrapping, user, roles } = useSession();
+  const { session, loading, bootstrapping, user, roles, bootstrapError, retryBootstrap } = useSession();
   const { mode, setMode } = useViewMode();
   const traineeOnly = isTraineeOnly(roles);
   const visibleNav = navItemsForRoles(roles);
@@ -71,7 +71,7 @@ export function AdminLayout({
 
   const dynamicBadge = (to: string): string | undefined => {
     if (to === "/users" && userCount > 0) return String(userCount);
-    if (to === "/assessments" && reviewCount > 0) return `${reviewCount} review`;
+    if (to === "/courses" && reviewCount > 0) return `${reviewCount} review`;
     if (to === "/classes/new" && draftCount > 0) return `${draftCount} draft`;
     return undefined;
   };
@@ -88,6 +88,8 @@ export function AdminLayout({
     return (
       <NoAccessPanel
         email={user?.email}
+        detail={bootstrapError}
+        onRetry={retryBootstrap}
         onSignOut={() => navigate({ to: "/auth", search: AUTH_SEARCH_DEFAULTS })}
       />
     );

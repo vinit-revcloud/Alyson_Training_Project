@@ -34,6 +34,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Test Templates", to: "/assessments/templates", icon: FileText },
   { label: "Assignments", to: "/assignments", icon: FileText },
   { label: "Analytics", to: "/analytics", icon: BarChart3 },
+  { label: "Executive", to: "/executive", icon: BarChart3 },
   { label: "Notifications", to: "/notifications", icon: Mail },
   { label: "Email Templates", to: "/notifications/templates", icon: Mail },
   { label: "Email Testing", to: "/email-testing", icon: Mail },

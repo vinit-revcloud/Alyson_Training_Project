@@ -14,7 +14,7 @@ export const Route = createFileRoute("/learn")({
 
 function LearnLayout() {
   const navigate = useNavigate();
-  const { session, loading, bootstrapping, user, roles } = useSession();
+  const { session, loading, bootstrapping, user, roles, bootstrapError, retryBootstrap } = useSession();
   const { mode, setMode } = useViewMode();
 
   useEffect(() => {
@@ -33,6 +33,8 @@ function LearnLayout() {
     return (
       <NoAccessPanel
         email={user?.email}
+        detail={bootstrapError}
+        onRetry={retryBootstrap}
         onSignOut={() => navigate({ to: "/auth", search: AUTH_SEARCH_DEFAULTS })}
       />
     );

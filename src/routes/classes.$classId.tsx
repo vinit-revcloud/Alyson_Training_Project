@@ -22,12 +22,12 @@ import {
   listSectionsWithAssets,
   replaceSectionAsset,
   updateClassMeta,
-  updateClassStatus,
   updateSection,
   uploadSectionAsset,
   type ClassStatus,
   type SectionAssetRow,
 } from "@/lib/classes-api";
+import { invalidateClassLifecycleQueries, transitionClassStatus } from "@/lib/class-lifecycle";
 import { getAssessmentAttemptSummary, getClassAssessment } from "@/lib/assessments-api";
 import { regenerateSectionQuestions } from "@/lib/section-questions.functions";
 import { useServerFn } from "@tanstack/react-start";
@@ -109,20 +109,27 @@ function ClassEditor() {
     mutationFn: () => updateClassMeta(classId, { name, summary, audience, level }),
     onSuccess: () => {
       toast.success("Class details saved");
-      qc.invalidateQueries({ queryKey: ["class", classId] });
-      qc.invalidateQueries({ queryKey: ["course-classes"] });
+      invalidateClassLifecycleQueries(qc, { courseId: cls?.course_id, classId });
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
   const setStatus = useMutation({
-    mutationFn: (status: ClassStatus) => updateClassStatus(classId, status),
-    onSuccess: (_d, status) => {
+    mutationFn: async (status: ClassStatus) => {
+      if (!cls) throw new Error("Class not loaded");
+      return transitionClassStatus(cls, status);
+    },
+    onSuccess: (aiResult, status) => {
       toast.success(`Class moved to ${status}`);
-      qc.invalidateQueries({ queryKey: ["class", classId] });
-      qc.invalidateQueries({ queryKey: ["course-classes"] });
-      qc.invalidateQueries({ queryKey: ["courses"] });
-      qc.invalidateQueries({ queryKey: ["classes", "counts"] });
+      if (aiResult?.sectionQuestionCount || aiResult?.assessmentQuestionCount) {
+        toast.message("AI knowledge base processed", {
+          description: `${aiResult.sectionQuestionCount} section questions · ${aiResult.assessmentQuestionCount} final test questions`,
+        });
+      }
+      if (aiResult?.warnings?.length) {
+        toast.warning("Class saved with AI warnings", { description: aiResult.warnings[0] });
+      }
+      invalidateClassLifecycleQueries(qc, { courseId: cls?.course_id, classId });
     },
     onError: (e: Error) => toast.error(e.message),
   });

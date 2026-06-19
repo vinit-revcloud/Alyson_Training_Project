@@ -43,6 +43,7 @@ import { QuestionEditor } from "./QuestionEditor";
 import { DifficultyChart } from "./DifficultyChart";
 import { exportTestPdf } from "@/lib/export-pdf";
 import { saveClassAssessment } from "@/lib/assessments-api";
+import { invalidateClassLifecycleQueries } from "@/lib/class-lifecycle";
 import { listClassesForCounts, listCourses } from "@/lib/classes-api";
 import { Link } from "@tanstack/react-router";
 
@@ -338,7 +339,9 @@ export function TestBuilder({ preset }: { preset?: TestBuilderPreset }) {
                     });
                     setSavedAssessmentId(id);
                     setAttached(true);
-                    await qc.invalidateQueries({ queryKey: ["assessments-stats"] });
+                    invalidateClassLifecycleQueries(qc, {
+                      classId: linkToCourse && linkClassId ? linkClassId : undefined,
+                    });
                     await qc.invalidateQueries({ queryKey: ["interview-assessments"] });
                     toast.success(
                       isInterview

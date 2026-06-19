@@ -31,7 +31,7 @@ export const Route = createFileRoute("/auth")({
 function AuthPage() {
   const navigate = useNavigate();
   const { mode: searchMode, email: searchEmail, token: searchToken } = Route.useSearch();
-  const { session, roles, loading, bootstrapping } = useSession();
+  const { session, roles, loading, bootstrapping, bootstrapError, retryBootstrap } = useSession();
   const [mode, setMode] = useState<"signin" | "signup">(searchMode);
   const [email, setEmail] = useState(searchEmail);
   const [password, setPassword] = useState("");
@@ -179,6 +179,8 @@ function AuthPage() {
     return (
       <NoAccessPanel
         email={session.user.email}
+        detail={bootstrapError}
+        onRetry={retryBootstrap}
         onSignOut={() => navigate({ to: "/auth", search: AUTH_SEARCH_DEFAULTS })}
       />
     );

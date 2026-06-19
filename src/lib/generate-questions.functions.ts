@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireDbAuth } from "@/integrations/neon/auth-middleware";
+import { requireContentManager } from "@/integrations/neon/auth-middleware";
+import { assertAiRateLimit } from "@/lib/ai-rate-limit.server";
 import { deepseekChatCompletion } from "@/lib/ai/deepseek";
 import type { Question } from "./test-types";
 
@@ -24,9 +25,10 @@ const QuestionSchema = z.object({
 });
 
 export const generateQuestions = createServerFn({ method: "POST" })
-  .middleware([requireDbAuth])
+  .middleware([requireContentManager])
   .inputValidator((data: unknown) => InputSchema.parse(data))
-  .handler(async ({ data }): Promise<{ questions: Question[] }> => {
+  .handler(async ({ data, context }): Promise<{ questions: Question[] }> => {
+    assertAiRateLimit(context.userId);
     const isInterview = data.purpose === "interview";
 
     const difficultyHint = isInterview

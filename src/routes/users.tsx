@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AdminLayout } from "@/components/admin/AdminLayout";
@@ -32,9 +32,6 @@ import {
   Filter,
   GraduationCap,
   ChevronDown,
-  BookPlus,
-  KeyRound,
-  Send,
   Shield,
   Eye,
   AlertTriangle,
@@ -43,11 +40,20 @@ import {
 } from "lucide-react";
 import {
   DEPARTMENTS,
-  listUsersWithAssignments,
   updateUserDepartment,
-  type UserRow,
 } from "@/lib/assignments-api";
+import {
+  listWorkspaceUsers,
+  setUsersRole,
+  setUsersStatus,
+} from "@/lib/user-management-api";
+import {
+  WORKSPACE_ROLE_OPTIONS,
+  workspaceRoleLabel,
+  type WorkspaceRole,
+} from "@/lib/workspace-roles.shared";
 import { fetchUserMetricsMap, type UserMetrics } from "@/lib/users-metrics-api";
+import { getAllCourseDepartments } from "@/lib/assignments-api";
 import { listCourses } from "@/lib/classes-api";
 import { toast } from "sonner";
 
@@ -76,6 +82,7 @@ function emptyMetrics(): Metrics {
 }
 
 function UsersPage() {
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const [q, setQ] = useState("");
   const [deptFilter, setDeptFilter] = useState<string>("all");
@@ -86,8 +93,8 @@ function UsersPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const { data: users = [], isLoading } = useQuery({
-    queryKey: ["users-assignments"],
-    queryFn: listUsersWithAssignments,
+    queryKey: ["workspace-users"],
+    queryFn: listWorkspaceUsers,
   });
   const { data: metricsMap = new Map() } = useQuery({
     queryKey: ["users-metrics"],
@@ -97,15 +104,60 @@ function UsersPage() {
     queryKey: ["courses"],
     queryFn: listCourses,
   });
+  const { data: courseDeptMap = {} } = useQuery({
+    queryKey: ["all-course-departments"],
+    queryFn: getAllCourseDepartments,
+  });
 
   const setDept = useMutation({
     mutationFn: ({ userId, department }: { userId: string; department: string | null }) =>
       updateUserDepartment(userId, department),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["users-assignments"] });
+      qc.invalidateQueries({ queryKey: ["workspace-users"] });
       toast.success("Department updated");
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to update"),
+  });
+
+  const bulkSetRole = useMutation({
+    mutationFn: ({ userIds, role }: { userIds: string[]; role: WorkspaceRole }) =>
+      setUsersRole(userIds, role),
+    onSuccess: (updated) => {
+      qc.invalidateQueries({ queryKey: ["workspace-users"] });
+      toast.success(`Updated roles for ${updated} user${updated === 1 ? "" : "s"}`);
+      setSelected(new Set());
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to update roles"),
+  });
+
+  const bulkSetStatus = useMutation({
+    mutationFn: ({
+      userIds,
+      status,
+    }: {
+      userIds: string[];
+      status: "active" | "suspended";
+    }) => setUsersStatus(userIds, status),
+    onSuccess: (updated, { status }) => {
+      qc.invalidateQueries({ queryKey: ["workspace-users"] });
+      toast.success(
+        status === "suspended"
+          ? `Suspended ${updated} account${updated === 1 ? "" : "s"}`
+          : `Reactivated ${updated} account${updated === 1 ? "" : "s"}`,
+      );
+      setSelected(new Set());
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to update status"),
+  });
+
+  const setRole = useMutation({
+    mutationFn: ({ userId, role }: { userId: string; role: WorkspaceRole }) =>
+      setUsersRole([userId], role),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["workspace-users"] });
+      toast.success("Role updated");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to update role"),
   });
 
   const enriched = useMemo(
@@ -138,12 +190,11 @@ function UsersPage() {
         courseFilter === "all"
           ? true
           : (() => {
-              const c = courses.find((x) => x.id === courseFilter);
-              if (!c) return false;
-              // course is "assigned" to the user when its department matches
-              return !!u.department && (c as { role?: string }).role
-                ? u.department === (c as { role?: string }).role
-                : u.assigned_courses > 0;
+              const depts =
+                courseDeptMap instanceof Map
+                  ? courseDeptMap.get(courseFilter)
+                  : undefined;
+              return !!u.department && (depts?.includes(u.department) ?? false);
             })();
       const matchComp =
         completionFilter === "all"
@@ -163,7 +214,31 @@ function UsersPage() {
               : m.status === "Needs Attention";
       return matchQ && matchD && matchR && matchC && matchComp && matchStatus;
     });
-  }, [enriched, q, deptFilter, roleFilter, courseFilter, completionFilter, statusFilter, courses]);
+  }, [enriched, q, deptFilter, roleFilter, courseFilter, completionFilter, statusFilter, courseDeptMap]);
+
+  const exportCsv = () => {
+    const header = ["Name", "Email", "Department", "Roles", "Status", "Completion %"];
+    const lines = filtered.map(({ user: u, metrics: m }) =>
+      [
+        u.display_name ?? "",
+        u.email ?? "",
+        u.department ?? "",
+        u.roles.join("; "),
+        u.status,
+        String(m.completion),
+      ]
+        .map((c) => `"${String(c).replace(/"/g, '""')}"`)
+        .join(","),
+    );
+    const blob = new Blob([[header.join(","), ...lines].join("\n")], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `users-export-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("Exported CSV");
+  };
 
   const stats = useMemo(() => {
     const atRisk = enriched.filter((e) => e.metrics.status === "At Risk").length;
@@ -193,22 +268,29 @@ function UsersPage() {
     setSelected(next);
   };
 
-  const runBulk = (action: string) => {
+  const runBulkRole = (role: WorkspaceRole) => {
     if (selected.size === 0) {
       toast.error("Select at least one user");
       return;
     }
-    toast.success(`${action} queued for ${selected.size} user${selected.size === 1 ? "" : "s"}`);
-    setSelected(new Set());
+    bulkSetRole.mutate({ userIds: [...selected], role });
+  };
+
+  const runBulkStatus = (status: "active" | "suspended") => {
+    if (selected.size === 0) {
+      toast.error("Select at least one user");
+      return;
+    }
+    bulkSetStatus.mutate({ userIds: [...selected], status });
   };
 
   return (
     <AdminLayout
       title="Users"
-      subtitle="Monitor learner progress, manage roles, and take quick actions"
+      subtitle="Manage recruiters, HR, trainers, and learners — assign roles and departments"
       actions={
         <div className="flex items-center gap-2">
-          <Button variant="outline" className="h-9 gap-2 rounded-lg border-border">
+          <Button variant="outline" className="h-9 gap-2 rounded-lg border-border" onClick={exportCsv}>
             <Download className="h-4 w-4" /> Export CSV
           </Button>
         </div>
@@ -299,9 +381,6 @@ function UsersPage() {
                 Clear
               </button>
               <div className="ml-auto flex flex-wrap gap-1.5">
-                <BulkButton icon={BookPlus} label="Assign Course" onClick={() => runBulk("Assign course")} />
-                <BulkButton icon={KeyRound} label="Reset Password" onClick={() => runBulk("Password reset")} />
-                <BulkButton icon={Send} label="Send Notification" onClick={() => runBulk("Notification")} />
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button size="sm" variant="outline" className="h-8 gap-1.5 rounded-md border-border text-[12px]">
@@ -309,15 +388,37 @@ function UsersPage() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuLabel className="text-[11px]">Set role</DropdownMenuLabel>
+                    <DropdownMenuLabel className="text-[11px]">Set workspace role</DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    {["learner", "trainer", "admin"].map((r) => (
-                      <DropdownMenuItem key={r} onClick={() => runBulk(`Role → ${r}`)} className="capitalize">
-                        {r}
+                    {WORKSPACE_ROLE_OPTIONS.map((o) => (
+                      <DropdownMenuItem
+                        key={o.value}
+                        onClick={() => runBulkRole(o.value)}
+                        disabled={bulkSetRole.isPending}
+                      >
+                        {o.label}
                       </DropdownMenuItem>
                     ))}
                   </DropdownMenuContent>
                 </DropdownMenu>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 rounded-md border-border text-[12px]"
+                  disabled={bulkSetStatus.isPending}
+                  onClick={() => runBulkStatus("suspended")}
+                >
+                  Suspend
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 rounded-md border-border text-[12px]"
+                  disabled={bulkSetStatus.isPending}
+                  onClick={() => runBulkStatus("active")}
+                >
+                  Reactivate
+                </Button>
               </div>
             </div>
           ) : null}
@@ -399,25 +500,52 @@ function UsersPage() {
                           </div>
                         </td>
                         <td className="px-4 py-3">
-                          <div className="flex flex-wrap gap-1">
-                            {u.roles.length === 0 ? (
+                          <div className="flex flex-col gap-1.5">
+                            <Select
+                              value={u.roles[0] ?? "__none__"}
+                              onValueChange={(v) => {
+                                if (v === "__none__") return;
+                                setRole.mutate({ userId: u.user_id, role: v as WorkspaceRole });
+                              }}
+                              disabled={setRole.isPending || u.status === "suspended"}
+                            >
+                              <SelectTrigger className="h-8 w-44 rounded-md border-border bg-background text-[11px]">
+                                <SelectValue placeholder="Assign role…" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {u.roles.length === 0 ? (
+                                  <SelectItem value="__none__" disabled className="text-[12px]">
+                                    No access — assign role
+                                  </SelectItem>
+                                ) : null}
+                                {WORKSPACE_ROLE_OPTIONS.map((o) => (
+                                  <SelectItem key={o.value} value={o.value} className="text-[12px]">
+                                    {o.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            {u.roles.length > 1 ? (
+                              <div className="flex flex-wrap gap-1">
+                                {u.roles.map((r) => (
+                                  <Badge
+                                    key={r}
+                                    variant="outline"
+                                    className="rounded-md border-primary/30 bg-accent text-[10px] text-primary"
+                                  >
+                                    {workspaceRoleLabel(r as WorkspaceRole)}
+                                  </Badge>
+                                ))}
+                              </div>
+                            ) : null}
+                            {u.status === "suspended" ? (
                               <Badge
                                 variant="outline"
-                                className="rounded-md border-warning/40 bg-warning/10 text-[10.5px] text-warning"
+                                className="w-fit rounded-md border-destructive/40 bg-destructive/10 text-[10px] text-destructive"
                               >
-                                No access
+                                Suspended
                               </Badge>
-                            ) : (
-                              u.roles.map((r) => (
-                                <Badge
-                                  key={r}
-                                  variant="outline"
-                                  className="rounded-md border-primary/30 bg-accent text-[10.5px] capitalize text-primary"
-                                >
-                                  {r}
-                                </Badge>
-                              ))
-                            )}
+                            ) : null}
                           </div>
                         </td>
                         <td className="px-4 py-3">
@@ -506,7 +634,10 @@ function UsersPage() {
                                 {u.display_name ?? "(no name)"}
                               </div>
                               <div className="mt-0.5 text-[11px] text-muted-foreground">
-                                {u.department ?? "Unassigned"} · {u.roles.join(", ") || "no role"}
+                                {u.department ?? "Unassigned"} ·{" "}
+                                {u.roles.map((r) => workspaceRoleLabel(r as WorkspaceRole)).join(", ") ||
+                                  "no role"}
+                                {u.status === "suspended" ? " · suspended" : ""}
                               </div>
                               <div className="mt-3 grid grid-cols-3 gap-2 text-center">
                                 <MiniStat label="Modules" value={`${m.modulesDone}/${m.modulesTotal}`} />
@@ -519,10 +650,24 @@ function UsersPage() {
                                 <Row label="Status" value={m.status} />
                               </div>
                               <div className="mt-3 flex gap-1.5">
-                                <Button size="sm" variant="outline" className="h-7 flex-1 rounded-md text-[11px]">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 flex-1 rounded-md text-[11px]"
+                                  onClick={() => toast.message(u.email ?? "No email")}
+                                >
                                   View profile
                                 </Button>
-                                <Button size="sm" className="h-7 flex-1 rounded-md bg-primary text-[11px] text-primary-foreground hover:bg-primary-glow">
+                                <Button
+                                  size="sm"
+                                  className="h-7 flex-1 rounded-md bg-primary text-[11px] text-primary-foreground hover:bg-primary-glow"
+                                  onClick={() =>
+                                    navigate({
+                                      to: "/assignments",
+                                      search: u.department ? { department: u.department } : {},
+                                    })
+                                  }
+                                >
                                   Assign course
                                 </Button>
                               </div>
@@ -569,22 +714,6 @@ function FilterSelect({
         ))}
       </SelectContent>
     </Select>
-  );
-}
-
-function BulkButton({
-  icon: Icon,
-  label,
-  onClick,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <Button size="sm" variant="outline" onClick={onClick} className="h-8 gap-1.5 rounded-md border-border text-[12px]">
-      <Icon className="h-3.5 w-3.5" /> {label}
-    </Button>
   );
 }
 

@@ -32,6 +32,7 @@ import { BulkClassImportDialog } from "@/components/admin/BulkClassImportDialog"
 import { listCourses, type ClassStatus } from "@/lib/classes-api";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { getAllCourseDepartments } from "@/lib/assignments-api";
+import { DEPARTMENTS } from "@/lib/departments";
 
 export const Route = createFileRoute("/courses/")({
   head: () => ({ meta: [{ title: "Courses — Alyson Training Project" }] }),
@@ -113,11 +114,11 @@ function CoursesPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All roles</SelectItem>
-                <SelectItem value="Data Scientist">Data Scientist</SelectItem>
-                <SelectItem value="Product Manager">Product Manager</SelectItem>
-                <SelectItem value="Marketing">Marketing</SelectItem>
-                <SelectItem value="Engineer">Engineer</SelectItem>
-                <SelectItem value="Analyst">Analyst</SelectItem>
+                {DEPARTMENTS.map((d) => (
+                  <SelectItem key={d} value={d}>
+                    {d}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <Select value={sort} onValueChange={(v) => setSort(v as typeof sort)}>

@@ -1,14 +1,13 @@
 import { createCsrfMiddleware, createStart, createMiddleware } from "@tanstack/react-start";
 
 import { attachDbAuth } from "@/integrations/neon/auth-attacher";
-import { getTrustedPublicOrigins } from "@/lib/trusted-origins";
 import { renderErrorPage } from "./lib/error-page";
+import { captureServerException } from "./lib/observability.server";
 
-const csrfOrigins = getTrustedPublicOrigins();
-
+/** Same-origin check uses the request URL by default — do not pin a static origin list
+ *  (breaks Vercel preview URLs like *-fvf6.vercel.app when APP_BASE_URL is the prod alias). */
 const csrfMiddleware = createCsrfMiddleware({
   filter: (ctx) => ctx.handlerType === "serverFn",
-  ...(csrfOrigins.length ? { origin: csrfOrigins } : {}),
 });
 
 const errorMiddleware = createMiddleware().server(async ({ next }) => {
@@ -18,9 +17,9 @@ const errorMiddleware = createMiddleware().server(async ({ next }) => {
     if (error != null && typeof error === "object" && "statusCode" in error) {
       throw error;
     }
-    console.error(error);
     const request = await import("@tanstack/react-start/server").then((m) => m.getRequest());
     const path = request?.url ? new URL(request.url).pathname : "";
+    captureServerException(error, { path });
     if (path.startsWith("/api/")) {
       const message = error instanceof Error ? error.message : "Internal server error";
       return Response.json({ error: message }, { status: 500 });

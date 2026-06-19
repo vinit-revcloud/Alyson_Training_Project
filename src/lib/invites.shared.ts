@@ -1,17 +1,16 @@
-export type InviteRole = "admin" | "trainer" | "trainee" | "hiring_manager" | "ceo";
+import {
+  WORKSPACE_ROLE_OPTIONS,
+  workspaceRoleLabel,
+  type WorkspaceRole,
+} from "@/lib/workspace-roles.shared";
 
-export const INVITE_ROLE_OPTIONS: { value: InviteRole; label: string }[] = [
-  { value: "admin", label: "Admin" },
-  { value: "trainer", label: "Creator (Trainer)" },
-  { value: "trainee", label: "Student (Trainee)" },
-  { value: "hiring_manager", label: "Hiring Manager" },
-  { value: "ceo", label: "CEO (read-only)" },
-];
+export type InviteRole = WorkspaceRole;
+
+export const INVITE_ROLE_OPTIONS = WORKSPACE_ROLE_OPTIONS;
 
 export function inviteRoleLabel(role: InviteRole): string {
-  return INVITE_ROLE_OPTIONS.find((o) => o.value === role)?.label ?? role;
+  return workspaceRoleLabel(role);
 }
-
 export interface InviteRow {
   id: string;
   email: string;

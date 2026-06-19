@@ -320,7 +320,8 @@ export async function listAllAssessmentsWithStatsFromDb(): Promise<AssessmentSum
   }>(
     `SELECT id, title, class_id, role, status, is_primary, purpose, updated_at
      FROM assessments
-     ORDER BY updated_at DESC`,
+     ORDER BY updated_at DESC
+     LIMIT 500`,
   );
   const assessments = assessmentsRes.rows;
   if (!assessments.length) return [];
@@ -329,8 +330,8 @@ export async function listAllAssessmentsWithStatsFromDb(): Promise<AssessmentSum
   const assessmentIds = assessments.map((a) => a.id);
 
   const [classRowsRes, qRowsRes, asgnRowsRes] = await Promise.all([
-    pool.query<{ id: string; name: string; course_id: string | null }>(
-      `SELECT id, name, course_id FROM classes WHERE id = ANY($1::uuid[])`,
+    pool.query<{ id: string; name: string; course_id: string | null; status: string }>(
+      `SELECT id, name, course_id, status FROM classes WHERE id = ANY($1::uuid[])`,
       [classIds],
     ),
     pool.query<{ assessment_id: string }>(
@@ -366,9 +367,9 @@ export async function listAllAssessmentsWithStatsFromDb(): Promise<AssessmentSum
     }
   }
 
-  const classById = new Map<string, { name: string; course_id: string | null }>();
+  const classById = new Map<string, { name: string; course_id: string | null; status: string }>();
   for (const c of classRowsRes.rows) {
-    classById.set(c.id, { name: c.name, course_id: c.course_id });
+    classById.set(c.id, { name: c.name, course_id: c.course_id, status: c.status });
   }
 
   const qCount = new Map<string, number>();
@@ -458,6 +459,7 @@ export async function listAllAssessmentsWithStatsFromDb(): Promise<AssessmentSum
         a.updated_at instanceof Date
           ? a.updated_at.toISOString()
           : String(a.updated_at ?? ""),
+      class_status: cls?.status ?? null,
     };
   });
 

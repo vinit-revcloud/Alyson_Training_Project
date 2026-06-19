@@ -52,9 +52,10 @@ async function findOrCreateCourse(
   classStatus: ClassStatus,
   userId: string,
 ): Promise<string> {
+  const normalizedTitle = title.trim();
   const existing = await client.query<{ id: string }>(
-    `SELECT id FROM courses WHERE title = $1 LIMIT 1`,
-    [title],
+    `SELECT id FROM courses WHERE LOWER(TRIM(title)) = LOWER($1) LIMIT 1`,
+    [normalizedTitle],
   );
   if (existing.rows[0]?.id) return existing.rows[0].id;
 
@@ -65,11 +66,11 @@ async function findOrCreateCourse(
      VALUES ($1, $2, $3, $4, $5, $6, $7)
      RETURNING id`,
     [
-      title,
+      normalizedTitle,
       role,
       level,
       cover,
-      `${title} — managed via Alyson Training Project.`,
+      `${normalizedTitle} — managed via Alyson Training Project.`,
       courseStatus,
       userId,
     ],
@@ -104,7 +105,7 @@ export async function createClassRecordsInDb(
 
     const courseId = await findOrCreateCourse(
       client,
-      input.parentCourse,
+      input.parentCourse.trim(),
       input.audience,
       input.level,
       input.status,
@@ -115,11 +116,17 @@ export async function createClassRecordsInDb(
       await setCourseDepartment(client, courseId, input.audience);
     }
 
+    const maxRes = await client.query<{ max: number | null }>(
+      `SELECT COALESCE(MAX(position), -1) AS max FROM classes WHERE course_id = $1`,
+      [courseId],
+    );
+    const classPosition = (maxRes.rows[0]?.max ?? -1) + 1;
+
     const classInsert = await client.query<{ id: string }>(
       `INSERT INTO classes (
-        course_id, name, summary, level, audience, topics, status,
+        course_id, name, summary, level, audience, topics, status, position,
         test_difficulty, test_mcq_count, test_subjective_count, test_pass_mark, test_retest
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
       RETURNING id`,
       [
         courseId,
@@ -129,6 +136,7 @@ export async function createClassRecordsInDb(
         input.audience,
         input.topics,
         input.status,
+        classPosition,
         input.test.difficulty,
         input.test.mcqCount,
         input.test.subjectiveCount,
@@ -138,10 +146,19 @@ export async function createClassRecordsInDb(
     );
     const classId = classInsert.rows[0].id;
 
-    await client.query(`UPDATE courses SET topics = $2, updated_at = now() WHERE id = $1`, [
-      courseId,
-      input.topics,
-    ]);
+    if (input.topics.length) {
+      const topicsRes = await client.query<{ topics: string[] | null }>(
+        `SELECT topics FROM courses WHERE id = $1`,
+        [courseId],
+      );
+      const merged = Array.from(new Set([...(topicsRes.rows[0]?.topics ?? []), ...input.topics]));
+      await client.query(`UPDATE courses SET topics = $2, updated_at = now() WHERE id = $1`, [
+        courseId,
+        merged,
+      ]);
+    } else {
+      await client.query(`UPDATE courses SET updated_at = now() WHERE id = $1`, [courseId]);
+    }
 
     const sectionRows: Array<{ id: string; position: number }> = [];
     for (const sec of input.sections) {

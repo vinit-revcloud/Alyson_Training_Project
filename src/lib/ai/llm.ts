@@ -5,6 +5,7 @@ import {
   getOpenRouterModel,
   getOpenRouterVisionModel,
 } from "@/lib/config.server";
+import { logAiUsage } from "@/lib/ai-usage.server";
 
 export type ChatMessage = {
   role: "system" | "user" | "assistant";
@@ -18,7 +19,12 @@ export type LlmChatOptions = {
   messages: ChatMessage[];
   jsonMode?: boolean;
   maxTokens?: number;
+  /** For usage logging */
+  userId?: string;
+  feature?: string;
 };
+
+const LLM_TIMEOUT_MS = 45_000;
 
 type ProviderResult =
   | { ok: true; content: string }
@@ -51,6 +57,7 @@ async function callDeepSeek(messages: ChatMessage[], opts?: LlmChatOptions): Pro
         max_tokens: opts?.maxTokens ?? 8192,
         temperature: 0.4,
       }),
+      signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
     });
 
     if (!res.ok) {
@@ -94,6 +101,7 @@ async function callOpenRouter(messages: ChatMessage[], opts?: LlmChatOptions): P
         max_tokens: opts?.maxTokens ?? 8192,
         temperature: 0.4,
       }),
+      signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
     });
 
     if (!res.ok) {
@@ -132,8 +140,19 @@ function providerError(provider: "DeepSeek" | "OpenRouter", status: number, body
 
 /** Chat completion with DeepSeek primary and OpenRouter fallback. */
 export async function llmChat(opts: LlmChatOptions): Promise<string> {
+  const started = Date.now();
   const deepseek = await callDeepSeek(opts.messages, opts);
-  if (deepseek.ok) return deepseek.content;
+  if (deepseek.ok) {
+    void logAiUsage({
+      userId: opts.userId,
+      feature: opts.feature ?? "llm-chat",
+      model: "deepseek-chat",
+      durationMs: Date.now() - started,
+      tokensIn: Math.ceil(opts.messages.map((m) => m.content.length).reduce((a, b) => a + b, 0) / 4),
+      tokensOut: Math.ceil(deepseek.content.length / 4),
+    });
+    return deepseek.content;
+  }
 
   const openRouterKey = getOpenRouterApiKey();
   if (deepseek.fallbackEligible && openRouterKey) {
@@ -141,13 +160,33 @@ export async function llmChat(opts: LlmChatOptions): Promise<string> {
       `[llm] DeepSeek unavailable (${deepseek.status || "network"}), falling back to OpenRouter`,
     );
     const openRouter = await callOpenRouter(opts.messages, opts);
-    if (openRouter.ok) return openRouter.content;
+    if (openRouter.ok) {
+      void logAiUsage({
+        userId: opts.userId,
+        feature: opts.feature ?? "llm-chat",
+        model: getOpenRouterModel(),
+        durationMs: Date.now() - started,
+        tokensIn: Math.ceil(opts.messages.map((m) => m.content.length).reduce((a, b) => a + b, 0) / 4),
+        tokensOut: Math.ceil(openRouter.content.length / 4),
+      });
+      return openRouter.content;
+    }
     throw providerError("OpenRouter", openRouter.status, openRouter.body);
   }
 
   if (!getDeepSeekApiKey() && openRouterKey) {
     const openRouter = await callOpenRouter(opts.messages, opts);
-    if (openRouter.ok) return openRouter.content;
+    if (openRouter.ok) {
+      void logAiUsage({
+        userId: opts.userId,
+        feature: opts.feature ?? "llm-chat",
+        model: getOpenRouterModel(),
+        durationMs: Date.now() - started,
+        tokensIn: Math.ceil(opts.messages.map((m) => m.content.length).reduce((a, b) => a + b, 0) / 4),
+        tokensOut: Math.ceil(openRouter.content.length / 4),
+      });
+      return openRouter.content;
+    }
     throw providerError("OpenRouter", openRouter.status, openRouter.body);
   }
 

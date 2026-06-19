@@ -11,6 +11,7 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { Toaster } from "@/components/ui/sonner";
+import { AuthProvider } from "@/lib/auth-provider";
 import { ViewModeProvider } from "@/lib/view-mode";
 import "@fontsource/inter/400.css";
 import "@fontsource/inter/500.css";
@@ -129,10 +130,12 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <ViewModeProvider>
-        <Outlet />
-        <Toaster richColors position="top-center" />
-      </ViewModeProvider>
+      <AuthProvider>
+        <ViewModeProvider>
+          <Outlet />
+          <Toaster richColors position="top-center" />
+        </ViewModeProvider>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

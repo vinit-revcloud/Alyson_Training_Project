@@ -66,14 +66,14 @@ export const listSectionsWithAssetsFn = createServerFn({ method: "POST" })
   .handler(async ({ data }) => listSectionsWithAssetsFromDb(data.classId));
 
 export const getClassAssessmentSeedFn = createServerFn({ method: "POST" })
-  .middleware([requireDbAuth])
+  .middleware([requireContentManager])
   .inputValidator((data: unknown) => ClassIdSchema.parse(data))
   .handler(async ({ data }): Promise<ClassAssessmentSeed> =>
     getClassAssessmentSeedFromDb(data.classId),
   );
 
 export const listSectionQuestionsFn = createServerFn({ method: "POST" })
-  .middleware([requireDbAuth])
+  .middleware([requireContentManager])
   .inputValidator((data: unknown) => SectionIdSchema.parse(data))
   .handler(async ({ data }): Promise<SectionQuestionRow[]> =>
     listSectionQuestionsFromDb(data.sectionId),

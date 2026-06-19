@@ -13,7 +13,7 @@ const ADMIN_ONLY_PREFIXES = [
 
 const HIRING_MANAGER_PREFIXES = ["/interviews", "/hiring"];
 
-const CEO_READ_PREFIXES = ["/", "/analytics", "/hiring"];
+const CEO_READ_PREFIXES = ["/", "/analytics", "/hiring", "/executive"];
 
 export function hasRole(roles: string[], role: WorkspaceRole): boolean {
   return roles.includes(role);
@@ -80,7 +80,7 @@ export function navItemsForRoles(roles: string[]): NavItem[] {
   if (isTraineeOnly(roles)) return [];
   if (isExecutiveReadOnly(roles)) {
     return NAV_ITEMS.filter((item) =>
-      ["/", "/analytics", "/hiring/reports", "/interviews"].includes(item.to),
+      ["/", "/analytics", "/hiring/reports", "/interviews", "/executive"].includes(item.to),
     );
   }
   if (isHiringManagerOnly(roles)) {

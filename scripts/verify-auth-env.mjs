@@ -1,5 +1,5 @@
 /**
- * Quick check that Neon Auth env vars are present.
+ * Quick check that Neon Auth env vars are present and JWKS is reachable.
  * Usage: node scripts/verify-auth-env.mjs
  */
 import { readFileSync } from "node:fs";
@@ -50,13 +50,45 @@ for (const key of required) {
   }
 }
 
+const authUrl = (process.env.NEON_AUTH_URL ?? process.env.VITE_NEON_AUTH_URL ?? "").replace(
+  /\/$/,
+  "",
+);
+const viteAuth = (process.env.VITE_NEON_AUTH_URL ?? "").replace(/\/$/, "");
+const runtimeAuth = (process.env.NEON_AUTH_URL ?? "").replace(/\/$/, "");
+
+if (viteAuth && runtimeAuth && viteAuth !== runtimeAuth) {
+  console.error("MISMATCH: VITE_NEON_AUTH_URL and NEON_AUTH_URL differ — JWT verification will fail on server");
+  ok = false;
+} else if (authUrl) {
+  console.log(`OK auth URL parity (${authUrl})`);
+}
+
+const jwksUrl = authUrl ? `${authUrl}/.well-known/jwks.json` : "";
+if (jwksUrl) {
+  try {
+    const res = await fetch(jwksUrl);
+    if (!res.ok) {
+      console.error(`JWKS fetch failed: ${jwksUrl} → ${res.status}`);
+      ok = false;
+    } else {
+      const body = await res.json();
+      const keys = Array.isArray(body.keys) ? body.keys.length : 0;
+      console.log(`OK JWKS (${jwksUrl}) — ${keys} key(s)`);
+    }
+  } catch (err) {
+    console.error(`JWKS fetch error: ${jwksUrl}`, err instanceof Error ? err.message : err);
+    ok = false;
+  }
+}
+
 const appBase = process.env.APP_BASE_URL ?? "http://localhost:5173";
-console.log(`APP_BASE_URL (or default): ${appBase}`);
+console.log(`APP_BASE_URL (or default): ${appBase.replace(/\/$/, "")}`);
 console.log(
   "\nNeon Console checklist:",
   "\n  - Auth enabled on branch",
   "\n  - Data API enabled",
-  "\n  - Trusted domain: http://localhost:5173",
+  "\n  - Trusted domain: http://localhost:5173 (and 5174 if Vite uses alternate port)",
   "\n  - Allow localhost: on",
   "\n  - Google OAuth enabled",
   "\n  - Email/password enabled",

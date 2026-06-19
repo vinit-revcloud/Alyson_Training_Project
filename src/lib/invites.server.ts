@@ -1,7 +1,8 @@
 import type { PoolClient } from "pg";
 import { getPgPool } from "@/lib/pg.server";
+import type { InviteRole } from "@/lib/invites.shared";
 
-export type InviteRole = "admin" | "trainer" | "trainee";
+export type { InviteRole };
 
 export const INVITE_EXPIRY_DAYS = 14;
 

@@ -1,7 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useMemo, useState, type ReactNode } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { Card } from "@/components/ui/card";
@@ -41,8 +40,8 @@ import {
   FileType,
   GripVertical,
 } from "lucide-react";
-import { createClass, type SectionInput, type Level, type ClassStatus } from "@/lib/classes-api";
-import { finalizeClassCreation } from "@/lib/class-finalize.functions";
+import { createClass, finalizeClass, getCourse, listCourses, type SectionInput, type Level, type ClassStatus } from "@/lib/classes-api";
+import { invalidateClassLifecycleQueries } from "@/lib/class-lifecycle";
 import { formatErrorMessage } from "@/lib/format-error";
 import {
   validateClassForDraft,
@@ -56,6 +55,9 @@ import type { ClassSuggestion } from "@/lib/class-ai.functions";
 
 export const Route = createFileRoute("/classes/new")({
   head: () => ({ meta: [{ title: "Create class — Alyson Training Project" }] }),
+  validateSearch: (search: Record<string, unknown>) => ({
+    courseId: typeof search.courseId === "string" && search.courseId.trim() ? search.courseId.trim() : undefined,
+  }),
   component: NewClassWizard,
 });
 
@@ -105,8 +107,17 @@ interface Issue { step: number; message: string }
 
 function NewClassWizard() {
   const navigate = useNavigate();
+  const { courseId: prefillCourseId } = Route.useSearch();
   const qc = useQueryClient();
-  const finalizeClass = useServerFn(finalizeClassCreation);
+  const { data: existingCourses = [] } = useQuery({
+    queryKey: ["courses"],
+    queryFn: listCourses,
+  });
+  const { data: prefillCourse } = useQuery({
+    queryKey: ["course", prefillCourseId],
+    queryFn: () => (prefillCourseId ? getCourse(prefillCourseId) : Promise.resolve(null)),
+    enabled: !!prefillCourseId,
+  });
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
@@ -129,6 +140,13 @@ function NewClassWizard() {
     passMark: 75,
     retest: true,
   });
+
+  useEffect(() => {
+    if (!prefillCourse || parentCourse) return;
+    setParentCourse(prefillCourse.title);
+    setLevel(prefillCourse.level as Level);
+    setAudience(prefillCourse.role);
+  }, [prefillCourse, parentCourse]);
 
   const wizardInput = useMemo(
     () => ({
@@ -186,22 +204,22 @@ function NewClassWizard() {
     })),
   });
 
-  const persist = async (status: ClassStatus) => {
+  const persist = async (status: ClassStatus): Promise<{ courseId: string; classId: string } | null> => {
     const normalizedTest = normalizeTestConfig(test);
 
     if (status === "draft") {
-      const draftIssues = validateClassForDraft(className);
+      const draftIssues = validateClassForDraft(className, parentCourse);
       if (draftIssues.length) {
         toast.error("Cannot save draft", { description: draftIssues[0].message });
         setStep(draftIssues[0].step);
-        return false;
+        return null;
       }
     } else {
       const issues = validateClassForPublish({ ...wizardInput, test: normalizedTest });
       if (issues.length) {
         toast.error("Cannot save yet", { description: issues[0].message });
         setStep(issues[0].step);
-        return false;
+        return null;
       }
     }
 
@@ -214,30 +232,26 @@ function NewClassWizard() {
       });
 
       if (status === "draft") {
-        await qc.invalidateQueries({ queryKey: ["courses"] });
-        await qc.invalidateQueries({ queryKey: ["classes"] });
-        return true;
+        invalidateClassLifecycleQueries(qc, { courseId, classId });
+        return { courseId, classId };
       }
 
       setFinalizing(true);
       const aiResult = await finalizeClass({
-        data: {
-          classId,
-          courseId,
-          audience,
-          status,
-          test: {
-            difficulty: normalizedTest.difficulty,
-            mcqCount: normalizedTest.mcqCount,
-            subjectiveCount: normalizedTest.subjectiveCount,
-            passMark: normalizedTest.passMark,
-          },
-          generateSectionQuestions: true,
-          generateAssessment: status === "published",
+        classId,
+        courseId,
+        audience,
+        status,
+        test: {
+          difficulty: normalizedTest.difficulty,
+          mcqCount: normalizedTest.mcqCount,
+          subjectiveCount: normalizedTest.subjectiveCount,
+          passMark: normalizedTest.passMark,
         },
+        generateSectionQuestions: true,
+        generateAssessment: status === "published",
       });
-      await qc.invalidateQueries({ queryKey: ["courses"] });
-      await qc.invalidateQueries({ queryKey: ["classes"] });
+      invalidateClassLifecycleQueries(qc, { courseId, classId });
       if (aiResult.sectionQuestionCount > 0 || aiResult.assessmentQuestionCount > 0) {
         toast.message("AI knowledge base processed", {
           description: `${aiResult.sectionQuestionCount} section questions · ${aiResult.assessmentQuestionCount} final test questions`,
@@ -248,14 +262,13 @@ function NewClassWizard() {
           description: aiResult.warnings[0],
         });
       }
-      return true;
+      return { courseId, classId };
     } catch (e) {
       toast.error("Could not save class", {
         description: formatErrorMessage(e),
       });
-      void qc.invalidateQueries({ queryKey: ["courses"] });
-      void qc.invalidateQueries({ queryKey: ["classes"] });
-      return false;
+      invalidateClassLifecycleQueries(qc);
+      return null;
     } finally {
       setSubmitting(false);
       setFinalizing(false);
@@ -263,8 +276,8 @@ function NewClassWizard() {
   };
 
   const saveDraft = async () => {
-    const ok = await persist("draft");
-    if (ok) toast.success("Saved as draft");
+    const result = await persist("draft");
+    if (result) toast.success("Saved as draft");
   };
 
   const submitForApproval = async () => {
@@ -273,10 +286,24 @@ function NewClassWizard() {
       setStep(allIssues[0].step);
       return;
     }
-    const ok = await persist("in-review");
-    if (ok) {
-      toast.success("Submitted for approval");
-      navigate({ to: "/assessments" });
+    const result = await persist("in-review");
+    if (result) {
+      toast.success("Submitted for approval", {
+        description: "Review and calibrate the final test in the builder.",
+      });
+      navigate({
+        to: "/assessments/builder",
+        search: {
+          classId: result.classId,
+          className,
+          role: audience,
+          topics: topics.join(","),
+          difficulty: test.difficulty,
+          mcq: test.mcqCount,
+          subjective: test.subjectiveCount,
+          passMark: test.passMark,
+        },
+      });
     }
   };
 
@@ -286,10 +313,10 @@ function NewClassWizard() {
       setStep(allIssues[0].step);
       return;
     }
-    const ok = await persist("published");
-    if (ok) {
-      toast.success("Class published", { description: `"${className}" is live.` });
-      navigate({ to: "/courses" });
+    const result = await persist("published");
+    if (result) {
+      toast.success("Class published", { description: `"${className}" is live in ${parentCourse}.` });
+      navigate({ to: "/courses/$courseId", params: { courseId: result.courseId } });
     }
   };
 
@@ -443,7 +470,7 @@ function NewClassWizard() {
             </div>
 
             {step === 0 ? (
-              <StepClass {...{ className, setClassName, parentCourse, setParentCourse, level, setLevel, audience, setAudience, summary, setSummary }} />
+              <StepClass {...{ className, setClassName, parentCourse, setParentCourse, level, setLevel, audience, setAudience, summary, setSummary, existingCourses }} />
             ) : null}
             {step === 1 ? (
               <StepTopics {...{ topics, setTopics, topicDraft, setTopicDraft }} />
@@ -521,14 +548,46 @@ function StepClass(p: {
   level: Level; setLevel: (v: Level) => void;
   audience: string; setAudience: (v: string) => void;
   summary: string; setSummary: (v: string) => void;
+  existingCourses: Array<{ id: string; title: string; role: string; level: string }>;
 }) {
   return (
     <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
       <Field label="Class name" hint="e.g. Class One — Foundations">
         <Input value={p.className} onChange={(e) => p.setClassName(e.target.value)} placeholder="Class One — Foundations" className="h-10 rounded-lg border-border bg-background" />
       </Field>
-      <Field label="Parent course" hint="Will be created if it doesn't exist">
-        <Input value={p.parentCourse} onChange={(e) => p.setParentCourse(e.target.value)} placeholder="Data Science Foundations" className="h-10 rounded-lg border-border bg-background" />
+      <Field label="Parent course" hint="Pick an existing course or type a new name">
+        {p.existingCourses.length > 0 ? (
+          <Select
+            value={p.existingCourses.some((c) => c.title === p.parentCourse) ? p.parentCourse : "__custom__"}
+            onValueChange={(v) => {
+              if (v === "__custom__") return;
+              const course = p.existingCourses.find((c) => c.title === v);
+              if (course) {
+                p.setParentCourse(course.title);
+                p.setLevel(course.level as Level);
+                p.setAudience(course.role);
+              }
+            }}
+          >
+            <SelectTrigger className="h-10 rounded-lg border-border bg-background">
+              <SelectValue placeholder="Select or create course" />
+            </SelectTrigger>
+            <SelectContent>
+              {p.existingCourses.map((c) => (
+                <SelectItem key={c.id} value={c.title}>
+                  {c.title} · {c.role}
+                </SelectItem>
+              ))}
+              <SelectItem value="__custom__">+ New course (type below)</SelectItem>
+            </SelectContent>
+          </Select>
+        ) : null}
+        <Input
+          value={p.parentCourse}
+          onChange={(e) => p.setParentCourse(e.target.value)}
+          placeholder="Data Science Foundations"
+          className="mt-2 h-10 rounded-lg border-border bg-background"
+        />
       </Field>
       <Field label="Difficulty">
         <Select value={p.level} onValueChange={(v) => p.setLevel(v as Level)}>

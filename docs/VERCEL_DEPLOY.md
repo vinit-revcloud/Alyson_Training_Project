@@ -228,9 +228,15 @@ SES is `us-east-1`; Lambda workflow (optional) is `us-west-2`. Ensure IAM allows
 
 5. **Check Vercel function logs** — Failed bootstrap often shows `Unauthorized`, `invalid token`, or CSRF errors.
 
+6. **"Could not save class" / Unauthorized on `/classes/new`** — Usually server-function auth, not missing trainer role (admins can create classes too):
+   - Redeploy with latest code (CSRF must not pin `APP_BASE_URL` when you browse a `*-xxx.vercel.app` deployment URL).
+   - Confirm `NEON_AUTH_URL` / `NEON_DATA_API_URL` at **runtime** match the `VITE_*` values from build.
+   - Hard-refresh after deploy so the client picks up a fresh session token.
+
 | Issue | Fix |
 |-------|-----|
 | Sign-in does nothing / redirects back to `/auth` | Add Vercel URL to Neon **Trusted domains** |
+| "Could not save class" → Unauthorized | See item 6 above; check Vercel **Functions** logs for `no bearer token` vs CSRF |
 | "Sign-in succeeded but no session" | Neon trusted domains + Google OAuth origins |
 | Stuck on "Setting up your workspace…" | Set `DATABASE_URL`, `NEON_AUTH_URL`; check function logs |
 | "No Access" after sign-in | Admin must send invite from `/invites` or set `BOOTSTRAP_ADMIN_EMAILS` |
@@ -238,6 +244,35 @@ SES is `us-east-1`; Lambda workflow (optional) is `us-west-2`. Ensure IAM allows
 | Cron 401 | Ensure `CRON_SECRET` is set in Vercel env |
 | Cron not running | Set up [cron-job.org](#6-email-cron-required-for-invite-emails) on Hobby |
 | 500 on first load | Check Vercel **Functions** logs; verify all required env vars |
+
+---
+
+## Production scale (1k users)
+
+### Database
+- Set `DATABASE_URL` to the Neon **connection pooler** URL (`-pooler` in hostname).
+- Optional `PG_POOL_MAX=2` per serverless instance (default on Vercel).
+- Run `npm run db:apply-scale-indexes` after deploy for performance indexes + `ai_usage_log`.
+
+### File storage
+- Set `BLOB_READ_WRITE_TOKEN` from Vercel Blob store. Without it, uploads use local disk (ephemeral on Vercel).
+- Max upload sizes: 50MB video, 10MB documents/transcripts.
+
+### Email
+- **Transactional** (invites, interview): cron at `/api/internal/cron/tick` drains `auth_emails` + `transactional_emails` via SES.
+- **Assignments**: use `EMAIL_WORKFLOW_LAMBDA_ARN` Step Functions when configured.
+- Keep `EMAIL_AUTO_PROCESS` unset in production.
+
+### CEO demo (10 minutes)
+1. Sign in as admin → `/executive` (training + hiring + AI cost).
+2. `/invites` → invite hiring manager → they sign in and see hiring routes.
+3. `/classes/new` → publish class → `/courses/$id` → assign from `/assignments`.
+4. `/api/health` returns `ok: true` with database + JWKS checks.
+
+### Monitoring
+- `GET /api/health` — DB, Neon Auth JWKS, storage backend, SES/AI config.
+- Optional `SENTRY_DSN` for structured error capture.
+- `npm run test` — security unit tests (answer-key stripping).
 
 ---
 

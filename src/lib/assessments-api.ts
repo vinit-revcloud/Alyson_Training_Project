@@ -143,6 +143,7 @@ export interface AssessmentSummaryRow {
   completion: number;
   avg_score: number | null;
   updated_at: string;
+  class_status: string | null;
 }
 
 export async function listAllAssessmentsWithStats(): Promise<AssessmentSummaryRow[]> {

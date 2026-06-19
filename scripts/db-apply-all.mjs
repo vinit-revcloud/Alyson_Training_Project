@@ -18,6 +18,7 @@ const steps = [
   "db:apply-rls",
   "db:apply-email-seeds",
   "db:apply-email-queue-fix",
+  "db:apply-scale-indexes",
 ];
 
 console.log("Applying all database scripts in order…\n");

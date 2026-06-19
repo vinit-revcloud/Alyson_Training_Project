@@ -14,7 +14,7 @@ import type { Question } from "@/lib/test-types";
 export async function listCoursesFromDb(): Promise<CourseWithStats[]> {
   const pool = getPgPool();
   const coursesRes = await pool.query<CourseRow>(
-    `SELECT * FROM courses ORDER BY updated_at DESC`,
+    `SELECT * FROM courses ORDER BY updated_at DESC LIMIT 500`,
   );
   const courses = coursesRes.rows;
   if (!courses.length) return [];
@@ -54,7 +54,7 @@ export async function listCoursesFromDb(): Promise<CourseWithStats[]> {
 export async function listClassesForCountsFromDb(): Promise<ClassRow[]> {
   const pool = getPgPool();
   const { rows } = await pool.query<ClassRow>(
-    `SELECT * FROM classes ORDER BY updated_at DESC`,
+    `SELECT * FROM classes ORDER BY updated_at DESC LIMIT 1000`,
   );
   return rows;
 }

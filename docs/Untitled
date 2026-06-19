@@ -1,0 +1,7 @@
+Create Vercel App in your Vercel Dashboard and add following URL to authorization callback URLs:
+https://ep-morning-wind-aqckldmt.neonauth.c-8.us-east-1.aws.neon.tech/neondb/auth/callback/vercel
+
+ You must configure openid, email, and profile scopes in Vercel App permissions.
+Client ID
+Client ID
+Client Secret

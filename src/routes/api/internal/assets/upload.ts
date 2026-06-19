@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { uploadAssetFile } from "@/lib/asset-storage.server";
 import type { AssetBucket } from "@/lib/asset-storage.shared";
+import { assertUploadSize } from "@/lib/asset-upload-limits";
+import { assertSectionExistsForUpload } from "@/lib/asset-ownership.server";
 import { userFromAssetRequest } from "@/lib/asset-auth.server";
 
 const BUCKETS = new Set<string>(["class-videos", "class-documents", "class-transcripts", "interview-papers"]);
@@ -20,12 +22,19 @@ export const Route = createFileRoute("/api/internal/assets/upload")({
             return Response.json({ error: "Invalid upload" }, { status: 400 });
           }
 
+          assertUploadSize(bucket as AssetBucket, file.size);
+          await assertSectionExistsForUpload(storagePath);
+
           const buffer = Buffer.from(await file.arrayBuffer());
           await uploadAssetFile(bucket as AssetBucket, storagePath, buffer);
           return Response.json({ ok: true, path: storagePath });
         } catch (err) {
           const message = err instanceof Error ? err.message : "Upload failed";
-          const status = message.toLowerCase().includes("unauthorized") ? 401 : 500;
+          const status = message.toLowerCase().includes("unauthorized")
+            ? 401
+            : message.toLowerCase().includes("too large") || message.includes("Invalid")
+              ? 400
+              : 500;
           return Response.json({ error: message }, { status });
         }
       },

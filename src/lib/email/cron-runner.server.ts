@@ -1,6 +1,6 @@
 import { CronExpressionParser } from "cron-parser";
 import { getPgPool } from "@/lib/pg.server";
-import { processEmailQueue } from "@/lib/email/process-queue"; // dev manual drain only
+import { processEmailQueue } from "@/lib/email/process-queue";
 import type { JobKey } from "@/lib/email/schedules-api";
 import {
   runDailyReminders,
@@ -76,7 +76,15 @@ async function runJob(jobKey: JobKey): Promise<Record<string, unknown>> {
   }
 }
 
-/** Evaluate DB schedules, run due jobs, drain email queue via SES. */
+/** Drain invite/auth/interview transactional queues in production (not assignment Step Functions). */
+async function processTransactionalEmailQueues(): Promise<{
+  processed: number;
+  stopped?: string;
+}> {
+  return processEmailQueue();
+}
+
+/** Evaluate DB schedules, run due jobs, drain transactional email queue via SES. */
 export async function runCronTick(): Promise<CronTickResult> {
   const now = new Date();
   const schedules = await loadSchedules();
@@ -111,11 +119,11 @@ export async function runCronTick(): Promise<CronTickResult> {
     }
   }
 
-  // Production: enqueue-only — AWS Step Functions drains email_queue and sends via SES.
+  // Production: drain transactional/auth queues; assignment workflow may use Step Functions separately.
   const queue =
     process.env.EMAIL_AUTO_PROCESS === "1"
       ? await processEmailQueue()
-      : { processed: 0, stopped: "enqueue_only_aws_step_functions" };
+      : await processTransactionalEmailQueues();
 
   return {
     ok: true,

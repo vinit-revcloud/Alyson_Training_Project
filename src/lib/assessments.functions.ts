@@ -54,21 +54,21 @@ const SaveAssessmentInputSchema = z.object({
 });
 
 export const getClassAssessmentFn = createServerFn({ method: "POST" })
-  .middleware([requireDbAuth])
+  .middleware([requireContentManager])
   .inputValidator((data: unknown) => ClassIdSchema.parse(data))
   .handler(async ({ data }): Promise<AssessmentRow | null> =>
     getClassAssessmentFromDb(data.classId),
   );
 
 export const getAssessmentFn = createServerFn({ method: "POST" })
-  .middleware([requireDbAuth])
+  .middleware([requireContentManager])
   .inputValidator((data: unknown) => AssessmentIdSchema.parse(data))
   .handler(async ({ data }): Promise<AssessmentRow | null> =>
     getAssessmentFromDb(data.assessmentId),
   );
 
 export const listAssessmentQuestionsFn = createServerFn({ method: "POST" })
-  .middleware([requireDbAuth])
+  .middleware([requireContentManager])
   .inputValidator((data: unknown) => AssessmentIdSchema.parse(data))
   .handler(async ({ data }): Promise<AssessmentQuestionRow[]> =>
     listAssessmentQuestionsFromDb(data.assessmentId),
@@ -116,11 +116,11 @@ export const duplicateAssessmentFn = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<string> => duplicateAssessmentInDb(data.assessmentId));
 
 export const listAllAssessmentsWithStatsFn = createServerFn({ method: "GET" })
-  .middleware([requireDbAuth])
+  .middleware([requireContentManager])
   .handler(async (): Promise<AssessmentSummaryRow[]> => listAllAssessmentsWithStatsFromDb());
 
 export const getAssessmentAttemptSummaryFn = createServerFn({ method: "POST" })
-  .middleware([requireDbAuth])
+  .middleware([requireContentManager])
   .inputValidator((data: unknown) => AssessmentIdSchema.parse(data))
   .handler(async ({ data }): Promise<AttemptSummary> =>
     getAssessmentAttemptSummaryFromDb(data.assessmentId),

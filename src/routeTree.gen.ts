@@ -15,6 +15,7 @@ import { Route as NotificationsRouteImport } from './routes/notifications'
 import { Route as LearnRouteImport } from './routes/learn'
 import { Route as InvitesRouteImport } from './routes/invites'
 import { Route as InterviewsRouteImport } from './routes/interviews'
+import { Route as ExecutiveRouteImport } from './routes/executive'
 import { Route as EmailTestingRouteImport } from './routes/email-testing'
 import { Route as CoursesRouteImport } from './routes/courses'
 import { Route as AuthRouteImport } from './routes/auth'
@@ -42,6 +43,11 @@ import { Route as AssessmentsBuilderRouteImport } from './routes/assessments.bui
 import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as AssessmentsAssessmentIdPreviewRouteImport } from './routes/assessments.$assessmentId.preview'
 import { Route as ApiWebhooksSesRouteImport } from './routes/api/webhooks/ses'
+import { Route as ApiClassesSectionAssetRouteImport } from './routes/api/classes/section-asset'
+import { Route as ApiClassesFinalizeRouteImport } from './routes/api/classes/finalize'
+import { Route as ApiClassesCreateRouteImport } from './routes/api/classes/create'
+import { Route as ApiAuthRolesRouteImport } from './routes/api/auth/roles'
+import { Route as ApiAuthBootstrapRouteImport } from './routes/api/auth/bootstrap'
 import { Route as ApiAssetsSplatRouteImport } from './routes/api/assets/$'
 import { Route as LearnCoursesCourseIdStudyRouteImport } from './routes/learn.courses.$courseId.study'
 import { Route as ApiPublicHooksWeeklySummaryRouteImport } from './routes/api/public/hooks/weekly-summary'
@@ -82,6 +88,11 @@ const InvitesRoute = InvitesRouteImport.update({
 const InterviewsRoute = InterviewsRouteImport.update({
   id: '/interviews',
   path: '/interviews',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ExecutiveRoute = ExecutiveRouteImport.update({
+  id: '/executive',
+  path: '/executive',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EmailTestingRoute = EmailTestingRouteImport.update({
@@ -220,6 +231,31 @@ const ApiWebhooksSesRoute = ApiWebhooksSesRouteImport.update({
   path: '/api/webhooks/ses',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiClassesSectionAssetRoute = ApiClassesSectionAssetRouteImport.update({
+  id: '/api/classes/section-asset',
+  path: '/api/classes/section-asset',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiClassesFinalizeRoute = ApiClassesFinalizeRouteImport.update({
+  id: '/api/classes/finalize',
+  path: '/api/classes/finalize',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiClassesCreateRoute = ApiClassesCreateRouteImport.update({
+  id: '/api/classes/create',
+  path: '/api/classes/create',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAuthRolesRoute = ApiAuthRolesRouteImport.update({
+  id: '/api/auth/roles',
+  path: '/api/auth/roles',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAuthBootstrapRoute = ApiAuthBootstrapRouteImport.update({
+  id: '/api/auth/bootstrap',
+  path: '/api/auth/bootstrap',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAssetsSplatRoute = ApiAssetsSplatRouteImport.update({
   id: '/api/assets/$',
   path: '/api/assets/$',
@@ -290,6 +326,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/courses': typeof CoursesRouteWithChildren
   '/email-testing': typeof EmailTestingRoute
+  '/executive': typeof ExecutiveRoute
   '/interviews': typeof InterviewsRouteWithChildren
   '/invites': typeof InvitesRoute
   '/learn': typeof LearnRouteWithChildren
@@ -315,6 +352,11 @@ export interface FileRoutesByFullPath {
   '/interviews/': typeof InterviewsIndexRoute
   '/learn/': typeof LearnIndexRoute
   '/api/assets/$': typeof ApiAssetsSplatRoute
+  '/api/auth/bootstrap': typeof ApiAuthBootstrapRoute
+  '/api/auth/roles': typeof ApiAuthRolesRoute
+  '/api/classes/create': typeof ApiClassesCreateRoute
+  '/api/classes/finalize': typeof ApiClassesFinalizeRoute
+  '/api/classes/section-asset': typeof ApiClassesSectionAssetRoute
   '/api/webhooks/ses': typeof ApiWebhooksSesRoute
   '/assessments/$assessmentId/preview': typeof AssessmentsAssessmentIdPreviewRoute
   '/api/internal/assets/delete': typeof ApiInternalAssetsDeleteRoute
@@ -334,6 +376,7 @@ export interface FileRoutesByTo {
   '/assignments': typeof AssignmentsRoute
   '/auth': typeof AuthRoute
   '/email-testing': typeof EmailTestingRoute
+  '/executive': typeof ExecutiveRoute
   '/invites': typeof InvitesRoute
   '/notifications': typeof NotificationsRouteWithChildren
   '/settings': typeof SettingsRoute
@@ -357,6 +400,11 @@ export interface FileRoutesByTo {
   '/interviews': typeof InterviewsIndexRoute
   '/learn': typeof LearnIndexRoute
   '/api/assets/$': typeof ApiAssetsSplatRoute
+  '/api/auth/bootstrap': typeof ApiAuthBootstrapRoute
+  '/api/auth/roles': typeof ApiAuthRolesRoute
+  '/api/classes/create': typeof ApiClassesCreateRoute
+  '/api/classes/finalize': typeof ApiClassesFinalizeRoute
+  '/api/classes/section-asset': typeof ApiClassesSectionAssetRoute
   '/api/webhooks/ses': typeof ApiWebhooksSesRoute
   '/assessments/$assessmentId/preview': typeof AssessmentsAssessmentIdPreviewRoute
   '/api/internal/assets/delete': typeof ApiInternalAssetsDeleteRoute
@@ -379,6 +427,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/courses': typeof CoursesRouteWithChildren
   '/email-testing': typeof EmailTestingRoute
+  '/executive': typeof ExecutiveRoute
   '/interviews': typeof InterviewsRouteWithChildren
   '/invites': typeof InvitesRoute
   '/learn': typeof LearnRouteWithChildren
@@ -404,6 +453,11 @@ export interface FileRoutesById {
   '/interviews/': typeof InterviewsIndexRoute
   '/learn/': typeof LearnIndexRoute
   '/api/assets/$': typeof ApiAssetsSplatRoute
+  '/api/auth/bootstrap': typeof ApiAuthBootstrapRoute
+  '/api/auth/roles': typeof ApiAuthRolesRoute
+  '/api/classes/create': typeof ApiClassesCreateRoute
+  '/api/classes/finalize': typeof ApiClassesFinalizeRoute
+  '/api/classes/section-asset': typeof ApiClassesSectionAssetRoute
   '/api/webhooks/ses': typeof ApiWebhooksSesRoute
   '/assessments/$assessmentId/preview': typeof AssessmentsAssessmentIdPreviewRoute
   '/api/internal/assets/delete': typeof ApiInternalAssetsDeleteRoute
@@ -427,6 +481,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/courses'
     | '/email-testing'
+    | '/executive'
     | '/interviews'
     | '/invites'
     | '/learn'
@@ -452,6 +507,11 @@ export interface FileRouteTypes {
     | '/interviews/'
     | '/learn/'
     | '/api/assets/$'
+    | '/api/auth/bootstrap'
+    | '/api/auth/roles'
+    | '/api/classes/create'
+    | '/api/classes/finalize'
+    | '/api/classes/section-asset'
     | '/api/webhooks/ses'
     | '/assessments/$assessmentId/preview'
     | '/api/internal/assets/delete'
@@ -471,6 +531,7 @@ export interface FileRouteTypes {
     | '/assignments'
     | '/auth'
     | '/email-testing'
+    | '/executive'
     | '/invites'
     | '/notifications'
     | '/settings'
@@ -494,6 +555,11 @@ export interface FileRouteTypes {
     | '/interviews'
     | '/learn'
     | '/api/assets/$'
+    | '/api/auth/bootstrap'
+    | '/api/auth/roles'
+    | '/api/classes/create'
+    | '/api/classes/finalize'
+    | '/api/classes/section-asset'
     | '/api/webhooks/ses'
     | '/assessments/$assessmentId/preview'
     | '/api/internal/assets/delete'
@@ -515,6 +581,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/courses'
     | '/email-testing'
+    | '/executive'
     | '/interviews'
     | '/invites'
     | '/learn'
@@ -540,6 +607,11 @@ export interface FileRouteTypes {
     | '/interviews/'
     | '/learn/'
     | '/api/assets/$'
+    | '/api/auth/bootstrap'
+    | '/api/auth/roles'
+    | '/api/classes/create'
+    | '/api/classes/finalize'
+    | '/api/classes/section-asset'
     | '/api/webhooks/ses'
     | '/assessments/$assessmentId/preview'
     | '/api/internal/assets/delete'
@@ -562,6 +634,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   CoursesRoute: typeof CoursesRouteWithChildren
   EmailTestingRoute: typeof EmailTestingRoute
+  ExecutiveRoute: typeof ExecutiveRoute
   InterviewsRoute: typeof InterviewsRouteWithChildren
   InvitesRoute: typeof InvitesRoute
   LearnRoute: typeof LearnRouteWithChildren
@@ -575,6 +648,11 @@ export interface RootRouteChildren {
   HiringReportsRoute: typeof HiringReportsRoute
   InterviewTokenRoute: typeof InterviewTokenRoute
   ApiAssetsSplatRoute: typeof ApiAssetsSplatRoute
+  ApiAuthBootstrapRoute: typeof ApiAuthBootstrapRoute
+  ApiAuthRolesRoute: typeof ApiAuthRolesRoute
+  ApiClassesCreateRoute: typeof ApiClassesCreateRoute
+  ApiClassesFinalizeRoute: typeof ApiClassesFinalizeRoute
+  ApiClassesSectionAssetRoute: typeof ApiClassesSectionAssetRoute
   ApiWebhooksSesRoute: typeof ApiWebhooksSesRoute
   ApiInternalAssetsDeleteRoute: typeof ApiInternalAssetsDeleteRoute
   ApiInternalAssetsUploadRoute: typeof ApiInternalAssetsUploadRoute
@@ -629,6 +707,13 @@ declare module '@tanstack/react-router' {
       path: '/interviews'
       fullPath: '/interviews'
       preLoaderRoute: typeof InterviewsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/executive': {
+      id: '/executive'
+      path: '/executive'
+      fullPath: '/executive'
+      preLoaderRoute: typeof ExecutiveRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/email-testing': {
@@ -820,6 +905,41 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiWebhooksSesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/classes/section-asset': {
+      id: '/api/classes/section-asset'
+      path: '/api/classes/section-asset'
+      fullPath: '/api/classes/section-asset'
+      preLoaderRoute: typeof ApiClassesSectionAssetRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/classes/finalize': {
+      id: '/api/classes/finalize'
+      path: '/api/classes/finalize'
+      fullPath: '/api/classes/finalize'
+      preLoaderRoute: typeof ApiClassesFinalizeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/classes/create': {
+      id: '/api/classes/create'
+      path: '/api/classes/create'
+      fullPath: '/api/classes/create'
+      preLoaderRoute: typeof ApiClassesCreateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/auth/roles': {
+      id: '/api/auth/roles'
+      path: '/api/auth/roles'
+      fullPath: '/api/auth/roles'
+      preLoaderRoute: typeof ApiAuthRolesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/auth/bootstrap': {
+      id: '/api/auth/bootstrap'
+      path: '/api/auth/bootstrap'
+      fullPath: '/api/auth/bootstrap'
+      preLoaderRoute: typeof ApiAuthBootstrapRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/assets/$': {
       id: '/api/assets/$'
       path: '/api/assets/$'
@@ -993,6 +1113,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   CoursesRoute: CoursesRouteWithChildren,
   EmailTestingRoute: EmailTestingRoute,
+  ExecutiveRoute: ExecutiveRoute,
   InterviewsRoute: InterviewsRouteWithChildren,
   InvitesRoute: InvitesRoute,
   LearnRoute: LearnRouteWithChildren,
@@ -1006,6 +1127,11 @@ const rootRouteChildren: RootRouteChildren = {
   HiringReportsRoute: HiringReportsRoute,
   InterviewTokenRoute: InterviewTokenRoute,
   ApiAssetsSplatRoute: ApiAssetsSplatRoute,
+  ApiAuthBootstrapRoute: ApiAuthBootstrapRoute,
+  ApiAuthRolesRoute: ApiAuthRolesRoute,
+  ApiClassesCreateRoute: ApiClassesCreateRoute,
+  ApiClassesFinalizeRoute: ApiClassesFinalizeRoute,
+  ApiClassesSectionAssetRoute: ApiClassesSectionAssetRoute,
   ApiWebhooksSesRoute: ApiWebhooksSesRoute,
   ApiInternalAssetsDeleteRoute: ApiInternalAssetsDeleteRoute,
   ApiInternalAssetsUploadRoute: ApiInternalAssetsUploadRoute,

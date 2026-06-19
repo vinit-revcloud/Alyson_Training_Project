@@ -1,6 +1,8 @@
 import { getSignedAssetUrlFn } from "@/lib/asset.functions";
 import type { AssetBucket } from "@/lib/asset-storage.shared";
-import { createClassRecords } from "@/lib/class-create.functions";
+import { authenticatedFetch, authHeaderRecord, ensureAuthToken, readApiError } from "@/lib/authenticated-client";
+import { apiCreateClassRecords, apiFinalizeClass } from "@/lib/classes-client";
+import type { FinalizeClassInput, FinalizeClassResult } from "@/lib/class-finalize.functions";
 import {
   addSectionFn,
   addSectionVideoLinkFn,
@@ -12,7 +14,6 @@ import {
   getCourseFn,
   getSectionAssetFn,
   getSectionAssetsForSectionFn,
-  insertSectionAssetFn,
   listClassesForCountsFn,
   listClassesForCourseFn,
   listCoursesFn,
@@ -116,12 +117,11 @@ export interface SectionAssetRow {
 }
 
 async function deleteAssetRemote(bucket: AssetBucket, storagePath: string): Promise<void> {
-  await fetch("/api/internal/assets/delete", {
+  const res = await authenticatedFetch("/api/internal/assets/delete", {
     method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ bucket, path: storagePath }),
   });
+  if (!res.ok) throw new Error(await readApiError(res));
 }
 
 async function uploadAsset(
@@ -138,9 +138,11 @@ async function uploadAsset(
   form.append("bucket", bucket);
   form.append("path", storagePath);
 
+  const token = await ensureAuthToken();
   const res = await fetch("/api/internal/assets/upload", {
     method: "POST",
     credentials: "include",
+    headers: { Authorization: `Bearer ${token}` },
     body: form,
   });
   if (!res.ok) {
@@ -165,9 +167,10 @@ async function insertSectionAssetRecord(
   bucket: AssetBucket,
   path: string,
   file: File,
-): Promise<void> {
-  await insertSectionAssetFn({
-    data: {
+): Promise<string> {
+  const res = await authenticatedFetch("/api/classes/section-asset", {
+    method: "POST",
+    body: JSON.stringify({
       sectionId,
       kind,
       storageBucket: bucket,
@@ -175,13 +178,19 @@ async function insertSectionAssetRecord(
       fileName: file.name,
       mimeType: file.type,
       sizeBytes: file.size,
-    },
+    }),
   });
+  if (!res.ok) throw new Error(await readApiError(res));
+  const body = (await res.json()) as { id: string };
+  return body.id;
+}
+
+export async function finalizeClass(input: FinalizeClassInput): Promise<FinalizeClassResult> {
+  return apiFinalizeClass(input);
 }
 
 export async function createClass(input: ClassInput): Promise<CreateClassResult> {
-  const { classId, courseId, sections: createdSections } = await createClassRecords({
-    data: {
+  const { classId, courseId, sections: createdSections } = await apiCreateClassRecords({
       name: input.name,
       parentCourse: input.parentCourse,
       level: input.level,
@@ -199,7 +208,7 @@ export async function createClass(input: ClassInput): Promise<CreateClassResult>
         videoLink: sec.videoLink?.trim() || undefined,
       })),
     },
-  });
+  );
 
   const sectionIdByPosition = new Map(createdSections.map((s) => [s.position, s.id]));
 
@@ -321,18 +330,7 @@ export async function uploadSectionAsset(
   const bucket =
     kind === "video" ? "class-videos" : kind === "document" ? "class-documents" : "class-transcripts";
   const { path } = await uploadAsset(bucket, classId, sectionId, file);
-  const { id } = await insertSectionAssetFn({
-    data: {
-      sectionId,
-      kind,
-      storageBucket: bucket,
-      storagePath: path,
-      fileName: file.name,
-      mimeType: file.type,
-      sizeBytes: file.size,
-    },
-  });
-  return id;
+  return insertSectionAssetRecord(sectionId, kind, bucket, path, file);
 }
 
 export async function replaceSectionAsset(

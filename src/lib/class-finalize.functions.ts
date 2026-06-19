@@ -10,7 +10,7 @@ import { TestConfigSchema } from "@/lib/class-create.validation";
 
 type DbClient = DbAdminClient;
 
-const InputSchema = z.object({
+export const FinalizeClassInputSchema = z.object({
   classId: z.string().uuid(),
   courseId: z.string().uuid(),
   audience: z.string().min(1),
@@ -285,96 +285,106 @@ Return ONLY JSON: { "questions": [ { "type": "mcq"|"subjective", "topic": "...",
   return questions.slice(0, totalCount);
 }
 
-export const finalizeClassCreation = createServerFn({ method: "POST" })
-  .middleware([requireContentManager])
-  .inputValidator((data: unknown) => InputSchema.parse(data))
-  .handler(async ({ data }) => {
-    const supabase = dbAdmin;
-    const warnings: string[] = [];
+export type FinalizeClassInput = z.infer<typeof FinalizeClassInputSchema>;
 
-    await upsertCourseDepartment(supabase, data.courseId, data.audience);
+export type FinalizeClassResult = {
+  courseDepartment: string;
+  sectionQuestionCount: number;
+  assessmentId: string | null;
+  assessmentQuestionCount: number;
+  warnings: string[];
+};
 
-    const { data: sections } = await supabase
-      .from("sections")
-      .select("id")
-      .eq("class_id", data.classId)
-      .order("position", { ascending: true });
+export async function runFinalizeClassCreation(
+  data: FinalizeClassInput,
+): Promise<FinalizeClassResult> {
+  const supabase = dbAdmin;
+  const warnings: string[] = [];
 
-    let sectionQuestionCount = 0;
-    if (data.generateSectionQuestions) {
-      for (const sec of sections ?? []) {
-        try {
-          sectionQuestionCount += await regenerateSectionQuestionsForSection(
-            supabase,
-            sec.id,
-            data.test.difficulty,
-          );
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          console.error(`[finalize] section questions failed for ${sec.id}:`, msg);
-          warnings.push(`Section questions skipped for one lesson: ${msg}`);
-          await supabase.from("sections").update({ questions_status: "error" }).eq("id", sec.id);
-        }
-      }
-    }
+  await upsertCourseDepartment(supabase, data.courseId, data.audience);
 
-    let assessmentId: string | null = null;
-    let assessmentQuestionCount = 0;
+  const { data: sections } = await supabase
+    .from("sections")
+    .select("id")
+    .eq("class_id", data.classId)
+    .order("position", { ascending: true });
 
-    const shouldGenerateAssessment =
-      data.generateAssessment || data.status === "published";
-
-    if (shouldGenerateAssessment && (sections?.length ?? 0) > 0) {
+  let sectionQuestionCount = 0;
+  if (data.generateSectionQuestions) {
+    for (const sec of sections ?? []) {
       try {
-        const { data: cls } = await supabase
-          .from("classes")
-          .select("name, summary")
-          .eq("id", data.classId)
-          .maybeSingle();
-
-        const { materialText, fileNames } = await gatherClassMaterial(supabase, data.classId);
-        const totalCount = Math.min(
-          60,
-          Math.max(5, data.test.mcqCount + data.test.subjectiveCount),
+        sectionQuestionCount += await regenerateSectionQuestionsForSection(
+          supabase,
+          sec.id,
+          data.test.difficulty,
         );
-        const level = levelFromDifficulty(data.test.difficulty);
-        const questions = await generateFinalAssessmentQuestions(
-          materialText,
-          fileNames,
-          data.audience,
-          level,
-          totalCount,
-        );
-        assessmentQuestionCount = questions.length;
-
-        if (questions.length > 0) {
-          const assessmentStatus = data.status === "published" ? "published" : "validated";
-          assessmentId = await savePrimaryAssessment(supabase, {
-            classId: data.classId,
-            title: `${cls?.name ?? "Class"} — Final Assessment`,
-            description: cls?.summary ?? "",
-            role: data.audience,
-            difficulty: data.test.difficulty,
-            level,
-            passMark: data.test.passMark,
-            status: assessmentStatus,
-            questions,
-          });
-        } else {
-          warnings.push("Final assessment was not generated — add questions manually in Assessments.");
-        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.error("[finalize] final assessment failed:", msg);
-        warnings.push(`Final assessment generation failed: ${msg}`);
+        console.error(`[finalize] section questions failed for ${sec.id}:`, msg);
+        warnings.push(`Section questions skipped for one lesson: ${msg}`);
+        await supabase.from("sections").update({ questions_status: "error" }).eq("id", sec.id);
       }
     }
+  }
 
-    return {
-      courseDepartment: data.audience,
-      sectionQuestionCount,
-      assessmentId,
-      assessmentQuestionCount,
-      warnings,
-    };
-  });
+  let assessmentId: string | null = null;
+  let assessmentQuestionCount = 0;
+
+  const shouldGenerateAssessment = data.generateAssessment || data.status === "published";
+
+  if (shouldGenerateAssessment && (sections?.length ?? 0) > 0) {
+    try {
+      const { data: cls } = await supabase
+        .from("classes")
+        .select("name, summary")
+        .eq("id", data.classId)
+        .maybeSingle();
+
+      const { materialText, fileNames } = await gatherClassMaterial(supabase, data.classId);
+      const totalCount = Math.min(60, Math.max(5, data.test.mcqCount + data.test.subjectiveCount));
+      const level = levelFromDifficulty(data.test.difficulty);
+      const questions = await generateFinalAssessmentQuestions(
+        materialText,
+        fileNames,
+        data.audience,
+        level,
+        totalCount,
+      );
+      assessmentQuestionCount = questions.length;
+
+      if (questions.length > 0) {
+        const assessmentStatus = data.status === "published" ? "published" : "validated";
+        assessmentId = await savePrimaryAssessment(supabase, {
+          classId: data.classId,
+          title: `${cls?.name ?? "Class"} — Final Assessment`,
+          description: cls?.summary ?? "",
+          role: data.audience,
+          difficulty: data.test.difficulty,
+          level,
+          passMark: data.test.passMark,
+          status: assessmentStatus,
+          questions,
+        });
+      } else {
+        warnings.push("Final assessment was not generated — add questions manually in Assessments.");
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[finalize] final assessment failed:", msg);
+      warnings.push(`Final assessment generation failed: ${msg}`);
+    }
+  }
+
+  return {
+    courseDepartment: data.audience,
+    sectionQuestionCount,
+    assessmentId,
+    assessmentQuestionCount,
+    warnings,
+  };
+}
+
+export const finalizeClassCreation = createServerFn({ method: "POST" })
+  .middleware([requireContentManager])
+  .inputValidator((data: unknown) => FinalizeClassInputSchema.parse(data))
+  .handler(async ({ data }) => runFinalizeClassCreation(data));
