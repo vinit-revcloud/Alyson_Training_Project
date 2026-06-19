@@ -16,6 +16,16 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -23,9 +33,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Calendar, PlayCircle, Plus, User } from "lucide-react";
+import { Calendar, PlayCircle, Plus, Trash2, User } from "lucide-react";
+import { BulkInterviewImportDialog } from "@/components/hiring/BulkInterviewImportDialog";
+import { HiringWorkflowStrip } from "@/components/hiring/HiringWorkflowStrip";
+import { InterviewGuide } from "@/components/hiring/InterviewGuide";
 import {
   createInterviewSessionFn,
+  deleteInterviewSessionFn,
   listInterviewAssessmentsFn,
   listInterviewSessionsFn,
   openInterviewSessionFn,
@@ -65,24 +79,44 @@ const STATUS_STYLE: Record<InterviewSessionStatus, string> = {
 function InterviewsPage() {
   const qc = useQueryClient();
   const listFn = useServerFn(listInterviewSessionsFn);
+  const [deleteTarget, setDeleteTarget] = useState<InterviewSessionListItem | null>(null);
+  const deleteFn = useServerFn(deleteInterviewSessionFn);
   const { data: sessions = [], isLoading } = useQuery({
     queryKey: ["interview-sessions"],
     queryFn: () => listFn(),
     refetchInterval: 5000,
   });
 
+  const remove = useMutation({
+    mutationFn: (sessionId: string) => deleteFn({ data: { sessionId } }),
+    onSuccess: () => {
+      toast.success("Interview session deleted");
+      setDeleteTarget(null);
+      qc.invalidateQueries({ queryKey: ["interview-sessions"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   return (
     <AdminLayout title="Interviews" subtitle="Schedule and proctor external candidate tests">
+      <HiringWorkflowStrip className="mb-5" />
+      <InterviewGuide variant="hub" className="mb-5" />
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <p className="text-[13px] text-muted-foreground">
           Click <strong>Open test</strong> on a session row when the candidate is in the waiting room (other browser/incognito). They will then see Start test.
         </p>
         <div className="flex shrink-0 items-center gap-2">
           <Button asChild variant="outline" size="sm">
+            <Link to="/interviews/assessments">Interview tests</Link>
+          </Button>
+          <Button asChild variant="outline" size="sm">
             <Link to="/assessments/builder" search={{ purpose: "interview" }}>
-              Create interview assessment
+              Create interview test
             </Link>
           </Button>
+          <BulkInterviewImportDialog
+            onImported={() => qc.invalidateQueries({ queryKey: ["interview-sessions"] })}
+          />
           <ScheduleDialog onCreated={() => qc.invalidateQueries({ queryKey: ["interview-sessions"] })} />
         </div>
       </div>
@@ -97,16 +131,53 @@ function InterviewsPage() {
         ) : (
           <div className="divide-y divide-border">
             {sessions.map((s) => (
-              <InterviewSessionRow key={s.id} session={s} />
+              <InterviewSessionRow
+                key={s.id}
+                session={s}
+                onDelete={() => setDeleteTarget(s)}
+              />
             ))}
           </div>
         )}
       </Card>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete interview session?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes the session for{" "}
+              <strong>{deleteTarget?.candidate_name}</strong> ({deleteTarget?.candidate_email}),
+              including submissions, AI evaluation, paper uploads, and proctor notes. The interview
+              assessment template is not deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={remove.isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                if (deleteTarget) remove.mutate(deleteTarget.id);
+              }}
+            >
+              {remove.isPending ? "Deleting…" : "Delete session"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AdminLayout>
   );
 }
 
-function InterviewSessionRow({ session: s }: { session: InterviewSessionListItem }) {
+function InterviewSessionRow({
+  session: s,
+  onDelete,
+}: {
+  session: InterviewSessionListItem;
+  onDelete: () => void;
+}) {
   const qc = useQueryClient();
   const openFn = useServerFn(openInterviewSessionFn);
   const isPaperOnly = s.assessment_mode === "paper_only";
@@ -179,6 +250,19 @@ function InterviewSessionRow({ session: s }: { session: InterviewSessionListItem
           Manage
         </Link>
       </Button>
+      <Button
+        size="sm"
+        variant="outline"
+        className="shrink-0 text-destructive hover:text-destructive"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onDelete();
+        }}
+        aria-label={`Delete session for ${s.candidate_name}`}
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </Button>
     </div>
   );
 }
@@ -187,8 +271,8 @@ function ScheduleDialog({ onCreated }: { onCreated: () => void }) {
   const [open, setOpen] = useState(false);
   const [candidateName, setCandidateName] = useState("");
   const [candidateEmail, setCandidateEmail] = useState("");
-  const [role, setRole] = useState("Data Scientist");
-  const [level, setLevel] = useState("Mid-Level");
+  const [role, setRole] = useState("");
+  const [level, setLevel] = useState("");
   const [assessmentId, setAssessmentId] = useState("");
   const [scheduledAt, setScheduledAt] = useState(() => {
     const d = new Date();
@@ -220,7 +304,7 @@ function ScheduleDialog({ onCreated }: { onCreated: () => void }) {
           candidateName,
           candidateEmail,
           role,
-          level,
+          level: level || "Mid-Level",
           scheduledAt: new Date(scheduledAt).toISOString(),
           expiresAt: new Date(expiresAt).toISOString(),
           assessmentMode,
@@ -295,21 +379,30 @@ function ScheduleDialog({ onCreated }: { onCreated: () => void }) {
           </div>
         ) : (
           <div className="space-y-3">
-            <Input
-              placeholder="Candidate name"
-              value={candidateName}
-              onChange={(e) => setCandidateName(e.target.value)}
-            />
+            <Input placeholder="Candidate name" value={candidateName} onChange={(e) => setCandidateName(e.target.value)} />
             <Input
               type="email"
               placeholder="Candidate email"
               value={candidateEmail}
               onChange={(e) => setCandidateEmail(e.target.value)}
             />
-            <Input placeholder="Role" value={role} onChange={(e) => setRole(e.target.value)} />
-            <Select value={level} onValueChange={setLevel}>
+            <div>
+              <label className="text-[11px] font-medium text-muted-foreground">
+                Job title for this interview
+              </label>
+              <Input
+                placeholder="e.g. Software Engineer, Marketing Analyst"
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+                className="mt-1"
+              />
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Shown to the candidate in the invite — enter the role you are hiring for (nothing is pre-filled).
+              </p>
+            </div>
+            <Select value={level || undefined} onValueChange={setLevel}>
               <SelectTrigger>
-                <SelectValue />
+                <SelectValue placeholder="Seniority level (optional)" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="Novice">Novice</SelectItem>
@@ -383,6 +476,7 @@ function ScheduleDialog({ onCreated }: { onCreated: () => void }) {
                 disabled={
                   !candidateName ||
                   !candidateEmail ||
+                  !role.trim() ||
                   !assessmentId ||
                   create.isPending
                 }

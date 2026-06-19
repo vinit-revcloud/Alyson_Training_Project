@@ -563,6 +563,7 @@ export async function listPickableAssessmentsFromDb() {
   }>(
     `SELECT id, title, status, class_id FROM assessments
      WHERE status IN ('validated', 'published')
+       AND (purpose IS NULL OR purpose = 'training')
      ORDER BY updated_at DESC`,
   );
   return rows;

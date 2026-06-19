@@ -1,0 +1,17 @@
+node_modules
+.output
+dist
+.nitro
+.git
+.env
+.env.*
+!.env.example
+storage
+*.log
+.cursor
+.lovable
+coverage
+.DS_Store
+Thumbs.db
+agent-transcripts
+terminals

@@ -9,6 +9,7 @@ import {
   appendInterviewEvent,
   addPaperUploadInDb,
   cancelInterviewSessionInDb,
+  deleteInterviewSessionInDb,
   confirmInterviewIdentityInDb,
   createInterviewSessionInDb,
   getGradingQuestionsForSession,
@@ -217,6 +218,14 @@ export const cancelInterviewSessionFn = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     await cancelInterviewSessionInDb(data.sessionId);
     return { cancelled: true };
+  });
+
+export const deleteInterviewSessionFn = createServerFn({ method: "POST" })
+  .middleware([requireContentManager])
+  .inputValidator((d: unknown) => SessionIdInput.parse(d))
+  .handler(async ({ data }) => {
+    await deleteInterviewSessionInDb(data.sessionId);
+    return { deleted: true };
   });
 
 export const updateInterviewProctorNotesFn = createServerFn({ method: "POST" })

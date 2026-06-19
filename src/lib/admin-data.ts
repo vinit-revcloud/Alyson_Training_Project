@@ -29,6 +29,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Invites", to: "/invites", icon: Mail },
   { label: "Assessments", to: "/assessments", icon: ClipboardCheck },
   { label: "Interviews", to: "/interviews", icon: Video },
+  { label: "Interview Tests", to: "/interviews/assessments", icon: ClipboardCheck },
   { label: "Hiring Reports", to: "/hiring/reports", icon: BarChart3 },
   { label: "Test Templates", to: "/assessments/templates", icon: FileText },
   { label: "Assignments", to: "/assignments", icon: FileText },

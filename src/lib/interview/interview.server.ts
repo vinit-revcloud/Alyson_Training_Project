@@ -708,6 +708,44 @@ export async function cancelInterviewSessionInDb(sessionId: string): Promise<voi
   if (!rowCount) throw new Error("Cannot cancel this session.");
 }
 
+/** Permanently remove a session, linked attempt, and orphan candidate row. */
+export async function deleteInterviewSessionInDb(sessionId: string): Promise<void> {
+  const pool = getPgPool();
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query<{ attempt_id: string | null; candidate_id: string }>(
+      `SELECT attempt_id, candidate_id FROM interview_sessions WHERE id = $1 FOR UPDATE`,
+      [sessionId],
+    );
+    const row = rows[0];
+    if (!row) throw new Error("Interview session not found.");
+
+    const { rowCount } = await client.query(`DELETE FROM interview_sessions WHERE id = $1`, [
+      sessionId,
+    ]);
+    if (!rowCount) throw new Error("Interview session not found.");
+
+    if (row.attempt_id) {
+      await client.query(`DELETE FROM assessment_attempts WHERE id = $1`, [row.attempt_id]);
+    }
+
+    await client.query(
+      `DELETE FROM candidates c
+       WHERE c.id = $1
+         AND NOT EXISTS (SELECT 1 FROM interview_sessions s WHERE s.candidate_id = c.id)`,
+      [row.candidate_id],
+    );
+
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 /** @deprecated AI scores are immutable — use appendHrNoteInDb / addSupportingScore instead. */
 export async function saveHrOverrideInDb(
   sessionId: string,

@@ -4,7 +4,7 @@
  * Optional: NODE_ENV=production npm run validate:deploy  (strict production rules)
  */
 
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import process from "node:process";
@@ -61,6 +61,14 @@ const appBaseUrl = process.env.APP_BASE_URL?.trim() ?? "";
 if (appBaseUrl && /localhost|127\.0\.0\.1/i.test(appBaseUrl) && isProdCheck) {
   errors.push("APP_BASE_URL must be your production HTTPS URL (not localhost)");
 }
+if (
+  isProdCheck &&
+  !appBaseUrl &&
+  !process.env.VERCEL_URL &&
+  !process.argv.includes("--vercel")
+) {
+  errors.push("APP_BASE_URL is required in production (or deploy on Vercel with VERCEL_URL)");
+}
 
 if (process.env.EMAIL_AUTO_PROCESS === "1" && isProdCheck) {
   errors.push("EMAIL_AUTO_PROCESS must be unset or 0 in production");
@@ -76,6 +84,16 @@ if (isProdCheck && process.env.BOOTSTRAP_ADMIN_EMAILS?.includes("admin@cintara.a
 
 if (!process.env.SES_CONFIGURATION_SET?.trim()) {
   warnings.push("SES_CONFIGURATION_SET is unset — SES event tracking may be limited");
+}
+
+if (!process.env.EMAIL_WORKFLOW_LAMBDA_ARN?.trim()) {
+  warnings.push(
+    "EMAIL_WORKFLOW_LAMBDA_ARN is unset — assignment email Step Functions workflow will not run",
+  );
+}
+
+if (!existsSync(resolve(root, ".output/server/index.mjs"))) {
+  warnings.push("No production build found — run npm run build before deploy");
 }
 
 if (errors.length) {

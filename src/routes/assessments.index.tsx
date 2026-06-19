@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AdminLayout } from "@/components/admin/AdminLayout";
+import { TrainingWorkflowStrip } from "@/components/training/TrainingWorkflowStrip";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -107,6 +108,7 @@ function AssessmentsPage() {
   const [filterType, setFilterType] = useState(ALL);
   const [filterStatus, setFilterStatus] = useState(ALL);
   const [filterRole, setFilterRole] = useState(ALL);
+  const [filterPurpose, setFilterPurpose] = useState<"training" | "interview" | typeof ALL>(ALL);
   const [sort, setSort] = useState<SortKey>("recent");
 
   const [assignTarget, setAssignTarget] = useState<AssessmentSummaryRow | null>(null);
@@ -146,22 +148,29 @@ function AssessmentsPage() {
     onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
   });
 
+  const trainingRows = useMemo(
+    () => rows.filter((r) => r.purpose !== "interview"),
+    [rows],
+  );
+
   const courses = useMemo(() => {
     const m = new Map<string, string>();
-    for (const r of rows) {
+    for (const r of trainingRows) {
       if (r.course_id && r.course_title) m.set(r.course_id, r.course_title);
     }
     return Array.from(m.entries()).map(([id, title]) => ({ id, title }));
-  }, [rows]);
+  }, [trainingRows]);
 
   const roles = useMemo(
-    () => Array.from(new Set(rows.map((r) => r.role).filter(Boolean))),
-    [rows],
+    () => Array.from(new Set(trainingRows.map((r) => r.role).filter(Boolean))),
+    [trainingRows],
   );
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     const list = rows.filter((r) => {
+      if (filterPurpose !== ALL && r.purpose !== filterPurpose) return false;
+      if (filterPurpose === ALL && r.purpose === "interview") return false;
       if (q && !r.title.toLowerCase().includes(q) && !(r.course_title ?? "").toLowerCase().includes(q)) return false;
       if (filterCourse !== ALL && r.course_id !== filterCourse) return false;
       if (filterType !== ALL && r.type !== filterType) return false;
@@ -188,39 +197,45 @@ function AssessmentsPage() {
       }
     };
     return list.sort(cmp);
-  }, [rows, search, filterCourse, filterType, filterStatus, filterRole, sort]);
+  }, [rows, search, filterCourse, filterType, filterStatus, filterRole, filterPurpose, sort]);
 
   const stats = useMemo(() => {
-    const total = rows.length;
-    const open = rows.filter((r) => r.status === "published").length;
-    const assigned = rows.reduce((s, r) => s + r.assigned_count, 0);
+    const total = trainingRows.length;
+    const open = trainingRows.filter((r) => r.status === "published").length;
+    const assigned = trainingRows.reduce((s, r) => s + r.assigned_count, 0);
     const avg =
-      rows.length === 0
+      trainingRows.length === 0
         ? 0
         : Math.round(
-            rows.reduce((s, r) => s + (r.avg_score ?? 0), 0) /
-              Math.max(1, rows.filter((r) => r.avg_score !== null).length),
+            trainingRows.reduce((s, r) => s + (r.avg_score ?? 0), 0) /
+              Math.max(1, trainingRows.filter((r) => r.avg_score !== null).length),
           );
-    const atRisk = rows.reduce((s, r) => s + r.at_risk_count, 0);
-    const overdue = rows.reduce((s, r) => s + r.overdue_count, 0);
+    const atRisk = trainingRows.reduce((s, r) => s + r.at_risk_count, 0);
+    const overdue = trainingRows.reduce((s, r) => s + r.overdue_count, 0);
     return { total, open, assigned, avg, atRisk, overdue };
-  }, [rows]);
+  }, [trainingRows]);
 
   return (
     <AdminLayout
       title="Assessments"
-      subtitle="Create, assign, and analyze tests across your courses"
+      subtitle="Employee training tests — for candidate screening use Interviews"
       actions={
-        <Button
-          asChild
-          className="h-9 gap-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary-glow"
-        >
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline" className="h-9 rounded-lg">
+            <Link to="/interviews">Hiring / interviews</Link>
+          </Button>
+          <Button
+            asChild
+            className="h-9 gap-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary-glow"
+          >
           <Link to="/assessments/builder">
             <Sparkles className="h-4 w-4" /> AI question generator
           </Link>
         </Button>
+        </div>
       }
     >
+      <TrainingWorkflowStrip className="mb-1" />
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           <StatCard label="Total" value={stats.total} />

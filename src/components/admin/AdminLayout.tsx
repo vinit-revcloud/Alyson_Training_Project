@@ -10,7 +10,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { signOut, useSession } from "@/lib/auth";
 import { AUTH_SEARCH_DEFAULTS } from "@/lib/auth-constants";
 import { NoAccessPanel } from "@/components/auth/NoAccessPanel";
-import { canAccessAdminRoute, isTraineeOnly, navItemsForRoles } from "@/lib/role-access";
+import { canAccessAdminRoute, hiringManagerHomePath, isHiringManagerOnly, isTraineeOnly, navItemsForRoles } from "@/lib/role-access";
 import { useViewMode } from "@/lib/view-mode";
 import alysonLogo from "@/assets/alyson-logo.svg";
 
@@ -43,7 +43,9 @@ export function AdminLayout({
   useEffect(() => {
     if (loading || bootstrapping) return;
     if (session && roles.length > 0 && !canAccessAdminRoute(pathname, roles)) {
-      navigate({ to: traineeOnly ? "/learn" : "/" });
+      navigate({
+        to: traineeOnly ? "/learn" : isHiringManagerOnly(roles) ? hiringManagerHomePath() : "/",
+      });
     }
   }, [loading, bootstrapping, session, roles, pathname, navigate, traineeOnly]);
 

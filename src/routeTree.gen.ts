@@ -29,6 +29,7 @@ import { Route as AssessmentsIndexRouteImport } from './routes/assessments.index
 import { Route as NotificationsTemplatesRouteImport } from './routes/notifications.templates'
 import { Route as NotificationsSchedulesRouteImport } from './routes/notifications.schedules'
 import { Route as LearnCoursesRouteImport } from './routes/learn.courses'
+import { Route as InterviewsAssessmentsRouteImport } from './routes/interviews.assessments'
 import { Route as InterviewsSessionIdRouteImport } from './routes/interviews.$sessionId'
 import { Route as InterviewTokenRouteImport } from './routes/interview.$token'
 import { Route as HiringReportsRouteImport } from './routes/hiring.reports'
@@ -38,6 +39,7 @@ import { Route as ClassesClassIdRouteImport } from './routes/classes.$classId'
 import { Route as AttemptAssignmentIdRouteImport } from './routes/attempt.$assignmentId'
 import { Route as AssessmentsTemplatesRouteImport } from './routes/assessments.templates'
 import { Route as AssessmentsBuilderRouteImport } from './routes/assessments.builder'
+import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as AssessmentsAssessmentIdPreviewRouteImport } from './routes/assessments.$assessmentId.preview'
 import { Route as ApiWebhooksSesRouteImport } from './routes/api/webhooks/ses'
 import { Route as ApiAssetsSplatRouteImport } from './routes/api/assets/$'
@@ -152,6 +154,11 @@ const LearnCoursesRoute = LearnCoursesRouteImport.update({
   path: '/courses',
   getParentRoute: () => LearnRoute,
 } as any)
+const InterviewsAssessmentsRoute = InterviewsAssessmentsRouteImport.update({
+  id: '/assessments',
+  path: '/assessments',
+  getParentRoute: () => InterviewsRoute,
+} as any)
 const InterviewsSessionIdRoute = InterviewsSessionIdRouteImport.update({
   id: '/$sessionId',
   path: '/$sessionId',
@@ -196,6 +203,11 @@ const AssessmentsBuilderRoute = AssessmentsBuilderRouteImport.update({
   id: '/builder',
   path: '/builder',
   getParentRoute: () => AssessmentsRoute,
+} as any)
+const ApiHealthRoute = ApiHealthRouteImport.update({
+  id: '/api/health',
+  path: '/api/health',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AssessmentsAssessmentIdPreviewRoute =
   AssessmentsAssessmentIdPreviewRouteImport.update({
@@ -284,6 +296,7 @@ export interface FileRoutesByFullPath {
   '/notifications': typeof NotificationsRouteWithChildren
   '/settings': typeof SettingsRoute
   '/users': typeof UsersRoute
+  '/api/health': typeof ApiHealthRoute
   '/assessments/builder': typeof AssessmentsBuilderRoute
   '/assessments/templates': typeof AssessmentsTemplatesRoute
   '/attempt/$assignmentId': typeof AttemptAssignmentIdRoute
@@ -293,6 +306,7 @@ export interface FileRoutesByFullPath {
   '/hiring/reports': typeof HiringReportsRoute
   '/interview/$token': typeof InterviewTokenRoute
   '/interviews/$sessionId': typeof InterviewsSessionIdRoute
+  '/interviews/assessments': typeof InterviewsAssessmentsRoute
   '/learn/courses': typeof LearnCoursesRouteWithChildren
   '/notifications/schedules': typeof NotificationsSchedulesRoute
   '/notifications/templates': typeof NotificationsTemplatesRoute
@@ -324,6 +338,7 @@ export interface FileRoutesByTo {
   '/notifications': typeof NotificationsRouteWithChildren
   '/settings': typeof SettingsRoute
   '/users': typeof UsersRoute
+  '/api/health': typeof ApiHealthRoute
   '/assessments/builder': typeof AssessmentsBuilderRoute
   '/assessments/templates': typeof AssessmentsTemplatesRoute
   '/attempt/$assignmentId': typeof AttemptAssignmentIdRoute
@@ -333,6 +348,7 @@ export interface FileRoutesByTo {
   '/hiring/reports': typeof HiringReportsRoute
   '/interview/$token': typeof InterviewTokenRoute
   '/interviews/$sessionId': typeof InterviewsSessionIdRoute
+  '/interviews/assessments': typeof InterviewsAssessmentsRoute
   '/learn/courses': typeof LearnCoursesRouteWithChildren
   '/notifications/schedules': typeof NotificationsSchedulesRoute
   '/notifications/templates': typeof NotificationsTemplatesRoute
@@ -369,6 +385,7 @@ export interface FileRoutesById {
   '/notifications': typeof NotificationsRouteWithChildren
   '/settings': typeof SettingsRoute
   '/users': typeof UsersRoute
+  '/api/health': typeof ApiHealthRoute
   '/assessments/builder': typeof AssessmentsBuilderRoute
   '/assessments/templates': typeof AssessmentsTemplatesRoute
   '/attempt/$assignmentId': typeof AttemptAssignmentIdRoute
@@ -378,6 +395,7 @@ export interface FileRoutesById {
   '/hiring/reports': typeof HiringReportsRoute
   '/interview/$token': typeof InterviewTokenRoute
   '/interviews/$sessionId': typeof InterviewsSessionIdRoute
+  '/interviews/assessments': typeof InterviewsAssessmentsRoute
   '/learn/courses': typeof LearnCoursesRouteWithChildren
   '/notifications/schedules': typeof NotificationsSchedulesRoute
   '/notifications/templates': typeof NotificationsTemplatesRoute
@@ -415,6 +433,7 @@ export interface FileRouteTypes {
     | '/notifications'
     | '/settings'
     | '/users'
+    | '/api/health'
     | '/assessments/builder'
     | '/assessments/templates'
     | '/attempt/$assignmentId'
@@ -424,6 +443,7 @@ export interface FileRouteTypes {
     | '/hiring/reports'
     | '/interview/$token'
     | '/interviews/$sessionId'
+    | '/interviews/assessments'
     | '/learn/courses'
     | '/notifications/schedules'
     | '/notifications/templates'
@@ -455,6 +475,7 @@ export interface FileRouteTypes {
     | '/notifications'
     | '/settings'
     | '/users'
+    | '/api/health'
     | '/assessments/builder'
     | '/assessments/templates'
     | '/attempt/$assignmentId'
@@ -464,6 +485,7 @@ export interface FileRouteTypes {
     | '/hiring/reports'
     | '/interview/$token'
     | '/interviews/$sessionId'
+    | '/interviews/assessments'
     | '/learn/courses'
     | '/notifications/schedules'
     | '/notifications/templates'
@@ -499,6 +521,7 @@ export interface FileRouteTypes {
     | '/notifications'
     | '/settings'
     | '/users'
+    | '/api/health'
     | '/assessments/builder'
     | '/assessments/templates'
     | '/attempt/$assignmentId'
@@ -508,6 +531,7 @@ export interface FileRouteTypes {
     | '/hiring/reports'
     | '/interview/$token'
     | '/interviews/$sessionId'
+    | '/interviews/assessments'
     | '/learn/courses'
     | '/notifications/schedules'
     | '/notifications/templates'
@@ -544,6 +568,7 @@ export interface RootRouteChildren {
   NotificationsRoute: typeof NotificationsRouteWithChildren
   SettingsRoute: typeof SettingsRoute
   UsersRoute: typeof UsersRoute
+  ApiHealthRoute: typeof ApiHealthRoute
   AttemptAssignmentIdRoute: typeof AttemptAssignmentIdRoute
   ClassesClassIdRoute: typeof ClassesClassIdRoute
   ClassesNewRoute: typeof ClassesNewRoute
@@ -704,6 +729,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LearnCoursesRouteImport
       parentRoute: typeof LearnRoute
     }
+    '/interviews/assessments': {
+      id: '/interviews/assessments'
+      path: '/assessments'
+      fullPath: '/interviews/assessments'
+      preLoaderRoute: typeof InterviewsAssessmentsRouteImport
+      parentRoute: typeof InterviewsRoute
+    }
     '/interviews/$sessionId': {
       id: '/interviews/$sessionId'
       path: '/$sessionId'
@@ -766,6 +798,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/assessments/builder'
       preLoaderRoute: typeof AssessmentsBuilderRouteImport
       parentRoute: typeof AssessmentsRoute
+    }
+    '/api/health': {
+      id: '/api/health'
+      path: '/api/health'
+      fullPath: '/api/health'
+      preLoaderRoute: typeof ApiHealthRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/assessments/$assessmentId/preview': {
       id: '/assessments/$assessmentId/preview'
@@ -894,11 +933,13 @@ const CoursesRouteWithChildren =
 
 interface InterviewsRouteChildren {
   InterviewsSessionIdRoute: typeof InterviewsSessionIdRoute
+  InterviewsAssessmentsRoute: typeof InterviewsAssessmentsRoute
   InterviewsIndexRoute: typeof InterviewsIndexRoute
 }
 
 const InterviewsRouteChildren: InterviewsRouteChildren = {
   InterviewsSessionIdRoute: InterviewsSessionIdRoute,
+  InterviewsAssessmentsRoute: InterviewsAssessmentsRoute,
   InterviewsIndexRoute: InterviewsIndexRoute,
 }
 
@@ -958,6 +999,7 @@ const rootRouteChildren: RootRouteChildren = {
   NotificationsRoute: NotificationsRouteWithChildren,
   SettingsRoute: SettingsRoute,
   UsersRoute: UsersRoute,
+  ApiHealthRoute: ApiHealthRoute,
   AttemptAssignmentIdRoute: AttemptAssignmentIdRoute,
   ClassesClassIdRoute: ClassesClassIdRoute,
   ClassesNewRoute: ClassesNewRoute,

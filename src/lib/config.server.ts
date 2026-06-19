@@ -25,25 +25,31 @@ export function getBootstrapAdminEmails(): string[] {
 export function getServerConfig() {
   return {
     nodeEnv: process.env.NODE_ENV,
-    appBaseUrl: process.env.APP_BASE_URL?.trim() || "http://localhost:5173",
+    appBaseUrl: resolveAppBaseUrl(),
     bootstrapAdminEmails: getBootstrapAdminEmails(),
   };
+}
+
+/** Public origin for emails, magic links, and cron callbacks. */
+export function resolveAppBaseUrl(): string {
+  const explicit = process.env.APP_BASE_URL?.trim();
+  if (explicit) return explicit.replace(/\/$/, "");
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  return "http://localhost:5173";
 }
 
 export function getAppBaseUrl(): string {
   return getServerConfig().appBaseUrl;
 }
-
-/** Fail fast when required production env is missing or unsafe. */
 export function assertProductionConfig(): void {
   if (!isProduction()) return;
 
   const issues: string[] = [];
-  const appBaseUrl = process.env.APP_BASE_URL?.trim();
+  const explicitBase = process.env.APP_BASE_URL?.trim();
 
-  if (!appBaseUrl) {
-    issues.push("APP_BASE_URL is required in production");
-  } else if (/localhost|127\.0\.0\.1/i.test(appBaseUrl)) {
+  if (!explicitBase && !process.env.VERCEL_URL) {
+    issues.push("APP_BASE_URL is required in production (set to your custom domain on Vercel)");
+  } else if (explicitBase && /localhost|127\.0\.0\.1/i.test(explicitBase)) {
     issues.push("APP_BASE_URL must not point to localhost in production");
   }
 

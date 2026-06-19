@@ -21,6 +21,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
 
 import {
   Select,
@@ -90,12 +91,13 @@ export function TestBuilder({ preset }: { preset?: TestBuilderPreset }) {
   const [name, setName] = useState("");
   const [assessmentTitle, setAssessmentTitle] = useState(() => {
     if (preset?.className) return `${preset.className} Assessment`;
-    if (isInterview) return `Interview · ${preset?.role ?? "Data Scientist"}`;
+    if (isInterview) return "Interview assessment";
     return "";
   });
   const [linkClassId, setLinkClassId] = useState(preset?.classId ?? "");
+  const [linkToCourse, setLinkToCourse] = useState(() => Boolean(preset?.classId));
   const [experience, setExperience] = useState(3);
-  const [role, setRole] = useState(preset?.role || "Data Scientist");
+  const [role, setRole] = useState(preset?.role ?? (isInterview ? "" : "Data Scientist"));
   const [level, setLevel] = useState<CandidateLevel>(mapClassDifficulty(preset?.difficulty));
   const [files, setFiles] = useState<MaterialFile[]>([]);
   const [count, setCount] = useState(presetCount || 35);
@@ -141,7 +143,10 @@ export function TestBuilder({ preset }: { preset?: TestBuilderPreset }) {
     if (!key || !preset || seedAppliedFor === key) return;
     if (preset.className) setAssessmentTitle(`${preset.className} Assessment`);
     if (preset.role) setRole(preset.role);
-    if (preset.classId) setLinkClassId(preset.classId);
+    if (preset.classId) {
+      setLinkClassId(preset.classId);
+      setLinkToCourse(true);
+    }
     setLevel(mapClassDifficulty(preset.difficulty));
     if (presetCount) setCount(presetCount);
     if (preset.materialText) {
@@ -264,6 +269,7 @@ export function TestBuilder({ preset }: { preset?: TestBuilderPreset }) {
             {step === 1 && (
               <ProfileStep
                 {...{ name, setName, experience, setExperience, role, setRole, level, setLevel }}
+                isInterview={isInterview}
                 onNext={() => setStep(2)}
               />
             )}
@@ -308,15 +314,19 @@ export function TestBuilder({ preset }: { preset?: TestBuilderPreset }) {
                     toast.error("Select a class to save this assessment");
                     return;
                   }
+                  if (isInterview && linkToCourse && !linkClassId) {
+                    toast.error("Select a class or turn off “Link to course”");
+                    return;
+                  }
                   const title =
                     assessmentTitle.trim() ||
                     (isInterview
-                      ? `Interview · ${role}`
-                      : `${preset?.className ?? role} Assessment`);
+                      ? "Interview assessment"
+                      : `${preset?.className ?? (role || "Training")} Assessment`);
                   setAttaching(true);
                   try {
                     const id = await saveClassAssessment({
-                      ...(linkClassId ? { classId: linkClassId } : {}),
+                      ...(linkToCourse && linkClassId ? { classId: linkClassId } : {}),
                       title,
                       role,
                       difficulty: preset?.difficulty ?? "Intermediate",
@@ -353,6 +363,8 @@ export function TestBuilder({ preset }: { preset?: TestBuilderPreset }) {
                 setAssessmentTitle={setAssessmentTitle}
                 linkClassId={linkClassId}
                 setLinkClassId={setLinkClassId}
+                linkToCourse={linkToCourse}
+                setLinkToCourse={setLinkToCourse}
                 classOptions={classOptions}
                 hasPresetClass={Boolean(preset?.classId)}
               />
@@ -442,26 +454,41 @@ function ProfileStep(props: {
   setRole: (s: string) => void;
   level: CandidateLevel;
   setLevel: (l: CandidateLevel) => void;
+  isInterview?: boolean;
   onNext: () => void;
 }) {
   return (
     <Card className="p-6 shadow-soft md:p-8">
       <StepHeader
         eyebrow="Step 1"
-        title="Who are we assessing?"
-        subtitle="Tell us about the candidate so the AI calibrates the right difficulty."
+        title={props.isInterview ? "Calibrate question difficulty" : "Who are we assessing?"}
+        subtitle={
+          props.isInterview
+            ? "Optional hints for the AI — these do not appear on the candidate schedule."
+            : "Tell us about the candidate so the AI calibrates the right difficulty."
+        }
       />
 
       <div className="grid gap-5 md:grid-cols-2">
-        <Field label="Candidate name">
+        {!props.isInterview ? (
+          <Field label="Candidate name">
+            <Input
+              value={props.name}
+              onChange={(e) => props.setName(e.target.value)}
+              placeholder="e.g. Priya Sharma"
+            />
+          </Field>
+        ) : null}
+        <Field label={props.isInterview ? "Topic focus (optional)" : "Role"}>
           <Input
-            value={props.name}
-            onChange={(e) => props.setName(e.target.value)}
-            placeholder="e.g. Priya Sharma"
+            value={props.role}
+            onChange={(e) => props.setRole(e.target.value)}
+            placeholder={
+              props.isInterview
+                ? "e.g. Python, statistics — for AI generation only"
+                : "e.g. Data Scientist"
+            }
           />
-        </Field>
-        <Field label="Role">
-          <Input value={props.role} onChange={(e) => props.setRole(e.target.value)} />
         </Field>
         <Field label={`Years of experience: ${props.experience}`}>
           <Slider
@@ -712,6 +739,8 @@ function ReviewStep({
   setAssessmentTitle,
   linkClassId,
   setLinkClassId,
+  linkToCourse,
+  setLinkToCourse,
   classOptions,
   hasPresetClass,
 }: {
@@ -734,6 +763,8 @@ function ReviewStep({
   setAssessmentTitle: (v: string) => void;
   linkClassId: string;
   setLinkClassId: (v: string) => void;
+  linkToCourse: boolean;
+  setLinkToCourse: (v: boolean) => void;
   classOptions: { id: string; label: string }[];
   hasPresetClass: boolean;
 }) {
@@ -750,7 +781,7 @@ function ReviewStep({
         <p className="text-[13px] font-semibold text-foreground">Save to library</p>
         <p className="text-[12px] text-muted-foreground">
           {isInterview
-            ? "Validate your questions, then save. Class is optional — a system interview pool is used if none is selected."
+            ? "Validate your questions, then save. By default this stays in the interview pool — not linked to employee courses."
             : "Pick a class and title, validate your questions, then save. Saved assessments appear on the Assessments page."}
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
@@ -758,14 +789,48 @@ function ReviewStep({
             <Input
               value={assessmentTitle}
               onChange={(e) => setAssessmentTitle(e.target.value)}
-              placeholder={isInterview ? "Interview · Data Scientist" : "Module 3 Final Test"}
+              placeholder={isInterview ? "Interview assessment" : "Module 3 Final Test"}
             />
           </Field>
-          {!hasPresetClass ? (
-            <Field label={isInterview ? "Link to class (optional)" : "Link to class"}>
+          {isInterview && !hasPresetClass ? (
+            <div className="flex flex-col justify-end gap-2 sm:col-span-2">
+              <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
+                <div>
+                  <p className="text-[12px] font-medium">Link to a course class</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Off by default — use course material to ground AI questions. Does not assign to learners.
+                  </p>
+                </div>
+                <Switch checked={linkToCourse} onCheckedChange={setLinkToCourse} />
+              </div>
+              {linkToCourse ? (
+                <Field label="Class">
+                  <Select value={linkClassId || undefined} onValueChange={setLinkClassId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a class…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {classOptions.length === 0 ? (
+                        <SelectItem value="_none" disabled>
+                          No classes — create a course & class first
+                        </SelectItem>
+                      ) : (
+                        classOptions.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.label}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                </Field>
+              ) : null}
+            </div>
+          ) : !hasPresetClass ? (
+            <Field label="Link to class">
               <Select value={linkClassId || undefined} onValueChange={setLinkClassId}>
                 <SelectTrigger>
-                  <SelectValue placeholder={isInterview ? "Auto — interview pool" : "Select a class…"} />
+                  <SelectValue placeholder="Select a class…" />
                 </SelectTrigger>
                 <SelectContent>
                   {classOptions.length === 0 ? (
@@ -830,12 +895,21 @@ function ReviewStep({
         </Button>
         {savedAssessmentId ? (
           <>
-            <Button asChild size="sm" variant="outline">
-              <Link to="/assessments">
-                <CheckCircle2 className="mr-2 h-4 w-4" />
-                Assessments list
-              </Link>
-            </Button>
+            {isInterview ? (
+              <Button asChild size="sm" variant="outline">
+                <Link to="/interviews/assessments">
+                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                  Interview tests
+                </Link>
+              </Button>
+            ) : (
+              <Button asChild size="sm" variant="outline">
+                <Link to="/assessments">
+                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                  Assessments list
+                </Link>
+              </Button>
+            )}
             {isInterview ? (
               <Button asChild size="sm" variant="outline">
                 <Link to="/interviews">Schedule interview</Link>

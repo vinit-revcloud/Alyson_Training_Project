@@ -1,0 +1,15 @@
+{
+  "name": "alyson-training-email-send-lambda",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "index.mjs",
+  "scripts": {
+    "deploy": "./zip-and-deploy.sh"
+  },
+  "dependencies": {
+    "@aws-sdk/client-sesv2": "^3.1063.0",
+    "@aws-sdk/client-sfn": "^3.1063.0",
+    "pg": "^8.16.3"
+  }
+}

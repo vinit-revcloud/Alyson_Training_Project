@@ -17,7 +17,8 @@ import {
   fetchCandidateReportsFn,
   fetchHiringFunnelFn,
 } from "@/lib/hiring/hiring-reports.functions";
-import { Users, Target, AlertTriangle, CheckCircle2, Video, ArrowRight } from "lucide-react";
+import { Users, Target, AlertTriangle, CheckCircle2, Video, ArrowRight, Plus } from "lucide-react";
+import { HiringWorkflowStrip } from "@/components/hiring/HiringWorkflowStrip";
 
 export const Route = createFileRoute("/hiring/reports")({
   head: () => ({ meta: [{ title: "Hiring Reports — Alyson" }] }),
@@ -55,14 +56,23 @@ function HiringReportsPage() {
       title="Hiring Reports"
       subtitle="Candidate screening funnel, AI recommendations, and proctoring signals"
       actions={
-        <Link
-          to="/interviews"
-          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium hover:bg-accent"
-        >
-          <Video className="h-3.5 w-3.5" /> Manage interviews
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            to="/interviews/assessments"
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium hover:bg-accent"
+          >
+            <Plus className="h-3.5 w-3.5" /> Interview tests
+          </Link>
+          <Link
+            to="/interviews"
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium hover:bg-accent"
+          >
+            <Video className="h-3.5 w-3.5" /> Manage interviews
+          </Link>
+        </div>
       }
     >
+      <HiringWorkflowStrip className="mb-5" />
       <div className="space-y-6">
         <section className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
           <MetricCard label="Total sessions" value={String(f?.total ?? 0)} icon={Users} />

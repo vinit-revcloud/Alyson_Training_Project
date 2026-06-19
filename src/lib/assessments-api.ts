@@ -134,6 +134,7 @@ export interface AssessmentSummaryRow {
   status: AssessmentStatus;
   type: "Final" | "Practice";
   is_primary: boolean;
+  purpose: "training" | "interview";
   question_count: number;
   assigned_count: number;
   completed_count: number;

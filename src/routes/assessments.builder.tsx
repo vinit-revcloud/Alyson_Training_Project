@@ -1,6 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { AdminLayout } from "@/components/admin/AdminLayout";
+import { HiringWorkflowStrip } from "@/components/hiring/HiringWorkflowStrip";
+import { InterviewGuide } from "@/components/hiring/InterviewGuide";
 import { TestBuilder } from "@/components/test-builder/TestBuilder";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -77,12 +79,20 @@ function BuilderPage() {
       }
     >
       {preset.purpose === "interview" ? (
-        <div className="mb-5 rounded-xl border border-violet-200 bg-violet-50/80 p-4 shadow-soft">
-          <p className="text-[13px] font-semibold text-violet-900">Interview assessment mode</p>
-          <p className="mt-1 text-[12px] text-violet-800">
-            Generate hard, scenario-based questions. On the review step, pick a class, validate, and{" "}
-            <strong>Save assessment</strong> — it will appear when scheduling interviews.
-          </p>
+        <div className="mb-5 space-y-3">
+          <HiringWorkflowStrip />
+          <InterviewGuide variant="tests" />
+          <div className="rounded-xl border border-violet-200 bg-violet-50/80 p-4 shadow-soft">
+            <p className="text-[13px] font-semibold text-violet-900">Interview test builder</p>
+            <p className="mt-1 text-[12px] text-violet-800">
+              Saved tests go to the interview pool by default (not employee courses). On the review
+              step you can optionally link a class for AI material — then schedule on{" "}
+              <Link to="/interviews" className="font-medium underline underline-offset-2">
+                Interviews
+              </Link>
+              .
+            </p>
+          </div>
         </div>
       ) : null}
 

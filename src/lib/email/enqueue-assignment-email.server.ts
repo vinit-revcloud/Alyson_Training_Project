@@ -14,6 +14,7 @@ import {
   type AssignmentEmailType,
   type EnqueueAssignmentEmailResult,
 } from "@/lib/email/enqueue-assignment-email.shared";
+import { triggerEmailWorkflow } from "@/lib/email/trigger-email-workflow.server";
 
 export type { AssignmentEmailType, EnqueueAssignmentEmailResult };
 
@@ -212,6 +213,13 @@ export async function enqueueAssignmentEmailInDb(
       });
       return { ok: false, error: "Failed to enqueue email — no queue id returned" };
     }
+
+    await triggerEmailWorkflow({
+      queueId,
+      payload,
+      emailType: email_type,
+    });
+
     return { ok: true, queued: true, queueId, notificationLogId };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

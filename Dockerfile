@@ -1,4 +1,4 @@
-# Alyson Training — production image
+# Alyson Training — production image (Nitro node-server)
 FROM node:20-alpine AS build
 
 WORKDIR /app
@@ -20,15 +20,18 @@ FROM node:20-alpine AS runtime
 WORKDIR /app
 
 ENV NODE_ENV=production
+ENV PORT=4173
+ENV HOST=0.0.0.0
 
-COPY package.json package-lock.json* ./
-RUN npm ci --omit=dev
+# Nitro bundles server code into .output — no node_modules needed at runtime
+COPY --from=build /app/.output ./.output
 
-COPY --from=build /app/dist ./dist
-
-# Uploaded assets (videos, papers) — mount a volume here in production
+# Uploaded assets (class videos, interview paper photos) — mount a volume here
 RUN mkdir -p storage
 
 EXPOSE 4173
 
-CMD ["npm", "run", "start"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:4173/api/health || exit 1
+
+CMD ["node", ".output/server/index.mjs"]

@@ -315,9 +315,10 @@ export async function listAllAssessmentsWithStatsFromDb(): Promise<AssessmentSum
     role: string;
     status: AssessmentStatus;
     is_primary: boolean;
+    purpose: string;
     updated_at: string;
   }>(
-    `SELECT id, title, class_id, role, status, is_primary, updated_at
+    `SELECT id, title, class_id, role, status, is_primary, purpose, updated_at
      FROM assessments
      ORDER BY updated_at DESC`,
   );
@@ -445,6 +446,7 @@ export async function listAllAssessmentsWithStatsFromDb(): Promise<AssessmentSum
       status: a.status,
       type: a.is_primary ? "Final" : "Practice",
       is_primary: a.is_primary,
+      purpose: a.purpose === "interview" ? "interview" : "training",
       question_count: qCount.get(a.id) ?? 0,
       assigned_count,
       completed_count,

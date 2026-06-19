@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AdminLayout } from "@/components/admin/AdminLayout";
+import { TrainingWorkflowStrip } from "@/components/training/TrainingWorkflowStrip";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -99,7 +100,7 @@ function AssignmentsPage() {
   return (
     <AdminLayout
       title="Test Assignments"
-      subtitle="Assign randomized tests, track attempts, auto-retake on fail (3 max)"
+      subtitle="Assign training tests to employees — external candidates use Interviews instead"
       actions={
         <div className="flex gap-2">
           <Dialog open={openAuto} onOpenChange={setOpenAuto}>
@@ -121,6 +122,7 @@ function AssignmentsPage() {
         </div>
       }
     >
+      <TrainingWorkflowStrip className="mb-1" />
       <div className="space-y-5">
         <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
           <MetricCard

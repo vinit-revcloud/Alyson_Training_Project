@@ -51,13 +51,23 @@ export function isTraineeOnly(roles: string[]): boolean {
   return roles.length === 1 && roles[0] === "trainee";
 }
 
+export function isHiringManagerOnly(roles: string[]): boolean {
+  return isHiringManager(roles) && !isTrainer(roles) && !isAdmin(roles);
+}
+
+export function hiringManagerHomePath(): string {
+  return "/interviews";
+}
+
 export function canAccessAdminRoute(pathname: string, roles: string[]): boolean {
   if (isTraineeOnly(roles)) return pathname.startsWith("/learn");
   if (isAdmin(roles)) return true;
   if (isExecutiveReadOnly(roles)) {
     return CEO_READ_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
   }
-  if (isHiringManager(roles) && !isTrainer(roles)) {
+  if (isHiringManagerOnly(roles)) {
+    if (pathname === "/assessments/builder") return true;
+    if (/^\/assessments\/[^/]+\/preview$/.test(pathname)) return true;
     return HIRING_MANAGER_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
   }
   if (isTrainer(roles) || isHiringManager(roles)) {
@@ -73,9 +83,9 @@ export function navItemsForRoles(roles: string[]): NavItem[] {
       ["/", "/analytics", "/hiring/reports", "/interviews"].includes(item.to),
     );
   }
-  if (isHiringManager(roles) && !isTrainer(roles) && !isAdmin(roles)) {
+  if (isHiringManagerOnly(roles)) {
     return NAV_ITEMS.filter((item) =>
-      ["/interviews", "/hiring/reports", "/analytics"].includes(item.to),
+      ["/interviews", "/interviews/assessments", "/hiring/reports", "/analytics"].includes(item.to),
     );
   }
   if (isAdmin(roles)) return NAV_ITEMS;

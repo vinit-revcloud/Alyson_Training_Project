@@ -1,4 +1,4 @@
-import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { createFileRoute, Link, notFound, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -21,11 +21,13 @@ import {
   PlayCircle,
   RefreshCw,
   Sparkles,
+  Trash2,
   User,
   XCircle,
 } from "lucide-react";
 import {
   cancelInterviewSessionFn,
+  deleteInterviewSessionFn,
   generateInterviewProfileFn,
   getInterviewSessionDetailFn,
   getInterviewSubmissionRecordFn,
@@ -48,6 +50,18 @@ import {
   ProfileReportPanel,
 } from "@/components/interview/InterviewExtendedPanels";
 import { cn } from "@/lib/utils";
+import { InterviewGuide } from "@/components/hiring/InterviewGuide";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 export const Route = createFileRoute("/interviews/$sessionId")({
   head: () => ({ meta: [{ title: "Interview session — Alyson" }] }),
@@ -70,6 +84,7 @@ const REC_STYLE: Record<HireRecommendation, string> = {
 
 function InterviewSessionPage() {
   const { sessionId } = Route.useParams();
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const fetchDetail = useServerFn(getInterviewSessionDetailFn);
   const fetchSubmission = useServerFn(getInterviewSubmissionRecordFn);
@@ -206,6 +221,17 @@ function InterviewSessionPage() {
     }
     cancel.mutate();
   };
+
+  const deleteFn = useServerFn(deleteInterviewSessionFn);
+  const remove = useMutation({
+    mutationFn: () => deleteFn({ data: { sessionId } }),
+    onSuccess: () => {
+      toast.success("Interview session deleted");
+      qc.invalidateQueries({ queryKey: ["interview-sessions"] });
+      void navigate({ to: "/interviews" });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   const rerunFn = useServerFn(rerunInterviewEvaluationFn);
   const rerun = useMutation({
@@ -350,6 +376,8 @@ function InterviewSessionPage() {
         <ArrowLeft className="h-3.5 w-3.5" />
         All interviews
       </Link>
+
+      <InterviewGuide variant="session" className="mb-4" />
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <Badge variant="outline">{session.status.replace("_", " ")}</Badge>
@@ -603,6 +631,41 @@ function InterviewSessionPage() {
                   Cancel session
                 </Button>
               )}
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="gap-2 text-destructive"
+                    disabled={remove.isPending}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    {remove.isPending ? "Deleting…" : "Delete session"}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete this interview session?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This permanently removes {session.candidate_name}&apos;s session, including
+                      submissions, AI evaluation, paper uploads, and notes. The interview assessment
+                      template is not deleted.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Keep session</AlertDialogCancel>
+                    <AlertDialogAction
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      disabled={remove.isPending}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        remove.mutate();
+                      }}
+                    >
+                      Delete permanently
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </div>
           </Card>
 

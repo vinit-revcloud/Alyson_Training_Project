@@ -62,13 +62,12 @@ Copy `.env.example` to `.env` for local dev. **Never commit `.env`** (it is giti
 npm install
 
 # Apply DB schema (once per Neon project, in order)
-npm run db:apply
-npm run db:apply-interview
-npm run db:apply-enterprise
-npm run db:apply-paper-only
-npm run db:apply-rls
-npm run db:apply-email-seeds
-npm run db:apply-email-queue-fix
+npm run db:apply-all
+
+# Or step-by-step:
+# npm run db:apply
+# npm run db:apply-interview
+# ...
 
 # Verify integrations
 npm run auth:verify-env
@@ -87,11 +86,15 @@ npm run build
 ## Build & run
 
 ```bash
-npm run build          # production bundle → dist/
-npm run start          # serve on 0.0.0.0:4173 (or use npm run preview)
+npm run build          # Nitro production bundle → .output/
+PORT=4173 HOST=0.0.0.0 npm run start   # node .output/server/index.mjs
 ```
 
-Deploy to AWS App Runner, ECS, or any Node 20+ host. Mount persistent storage for `storage/` if you use uploaded class videos or interview paper photos (local disk is ephemeral on stateless hosts — plan S3 migration for scale).
+Health check: `GET /api/health` → `{ "ok": true, ... }`
+
+Deploy to AWS App Runner, ECS, Railway, or any Node 20+ host. Mount persistent storage for `storage/` if you use uploaded class videos or interview paper photos (local disk is ephemeral on stateless hosts — plan S3 migration for scale).
+
+**Note:** `npm run start:preview` runs Vite preview (dev dependency) — use only for local smoke tests. Production Docker and `npm run start` use the Nitro node-server bundle.
 
 See [NEON_SETUP.md](./NEON_SETUP.md) for Neon project + Google OAuth. Auth: [AUTH.md](./AUTH.md). SES: [AWS_SES_SETUP.md](./AWS_SES_SETUP.md).
 
@@ -129,14 +132,28 @@ Individual hooks (legacy) also accept `Authorization: Bearer <CRON_SECRET>` or `
 
 ## Docker (optional)
 
+For self-hosted Node/Docker deployment (not Vercel), see below. **For Vercel, use [VERCEL_DEPLOY.md](./VERCEL_DEPLOY.md) instead.**
+
 ```bash
 docker build \
   --build-arg VITE_NEON_AUTH_URL=... \
   --build-arg VITE_NEON_DATA_API_URL=... \
   -t alyson-training:1.0.0 .
 
-docker run -p 4173:4173 --env-file .env.production alyson-training:1.0.0
+docker run -p 4173:4173 --env-file .env.production \
+  -v alyson-storage:/app/storage \
+  alyson-training:1.0.0
 ```
+
+Or: `docker compose up --build` (requires `.env.production` with build args exported for compose).
+
+The image runs `node .output/server/index.mjs` — no devDependencies at runtime. Health check hits `/api/health`.
+
+---
+
+## HR rollout
+
+After deploy, onboard hiring managers via `/invites` (role: **Hiring Manager**). Share [HR_ROLLOUT.md](./HR_ROLLOUT.md) with your HR team.
 
 ---
 

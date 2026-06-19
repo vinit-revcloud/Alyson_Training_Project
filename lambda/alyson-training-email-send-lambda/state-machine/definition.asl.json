@@ -1,0 +1,201 @@
+{
+  "Comment": "Alyson Training assignment email workflow — Day 0/7/14/30 with completion checks",
+  "StartAt": "SendFirstEmail",
+  "States": {
+    "SendFirstEmail": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "alyson-training-email-send-lambda",
+        "Payload": {
+          "action": "sendEmail",
+          "email_type.$": "$.first_email.email_type",
+          "template_name.$": "$.first_email.template_name",
+          "template_key.$": "$.first_email.template_key",
+          "notification_log_id.$": "$.first_email.notification_log_id",
+          "assignment_id.$": "$.assignment_id",
+          "user_id.$": "$.user_id",
+          "recipient_email.$": "$.recipient_email",
+          "placeholders.$": "$.placeholders",
+          "audience": "learner"
+        }
+      },
+      "ResultSelector": {
+        "sendResult.$": "$.Payload"
+      },
+      "ResultPath": "$.firstSend",
+      "Next": "Wait7Days_1"
+    },
+    "Wait7Days_1": {
+      "Type": "Wait",
+      "Seconds": 604800,
+      "Next": "CheckAfter7"
+    },
+    "CheckAfter7": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "alyson-training-email-send-lambda",
+        "Payload": {
+          "action": "checkAssignment",
+          "assignment_id.$": "$.assignment_id",
+          "user_id.$": "$.user_id"
+        }
+      },
+      "ResultSelector": {
+        "check.$": "$.Payload"
+      },
+      "ResultPath": "$.checkAfter7",
+      "Next": "CompleteAfter7"
+    },
+    "CompleteAfter7": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.checkAfter7.check.isComplete",
+          "BooleanEquals": true,
+          "Next": "WorkflowComplete"
+        }
+      ],
+      "Default": "SendDay7"
+    },
+    "SendDay7": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "alyson-training-email-send-lambda",
+        "Payload": {
+          "action": "sendEmail",
+          "email_type": "reminder_day7",
+          "template_name": "reminder_day7",
+          "template_key": "escalation_day7",
+          "assignment_id.$": "$.assignment_id",
+          "user_id.$": "$.user_id",
+          "recipient_email.$": "$.recipient_email",
+          "placeholders.$": "$.placeholders",
+          "audience": "learner"
+        }
+      },
+      "ResultSelector": {
+        "sendResult.$": "$.Payload"
+      },
+      "ResultPath": "$.day7",
+      "Next": "Wait7Days_2"
+    },
+    "Wait7Days_2": {
+      "Type": "Wait",
+      "Seconds": 604800,
+      "Next": "CheckAfter14"
+    },
+    "CheckAfter14": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "alyson-training-email-send-lambda",
+        "Payload": {
+          "action": "checkAssignment",
+          "assignment_id.$": "$.assignment_id",
+          "user_id.$": "$.user_id"
+        }
+      },
+      "ResultSelector": {
+        "check.$": "$.Payload"
+      },
+      "ResultPath": "$.checkAfter14",
+      "Next": "CompleteAfter14"
+    },
+    "CompleteAfter14": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.checkAfter14.check.isComplete",
+          "BooleanEquals": true,
+          "Next": "WorkflowComplete"
+        }
+      ],
+      "Default": "SendDay14"
+    },
+    "SendDay14": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "alyson-training-email-send-lambda",
+        "Payload": {
+          "action": "sendEmail",
+          "email_type": "reminder_day14",
+          "template_name": "reminder_day14",
+          "template_key": "escalation_day14",
+          "assignment_id.$": "$.assignment_id",
+          "user_id.$": "$.user_id",
+          "recipient_email.$": "$.recipient_email",
+          "placeholders.$": "$.placeholders",
+          "audience": "learner"
+        }
+      },
+      "ResultSelector": {
+        "sendResult.$": "$.Payload"
+      },
+      "ResultPath": "$.day14",
+      "Next": "Wait16Days"
+    },
+    "Wait16Days": {
+      "Type": "Wait",
+      "Seconds": 1382400,
+      "Next": "CheckAfter30"
+    },
+    "CheckAfter30": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "alyson-training-email-send-lambda",
+        "Payload": {
+          "action": "checkAssignment",
+          "assignment_id.$": "$.assignment_id",
+          "user_id.$": "$.user_id"
+        }
+      },
+      "ResultSelector": {
+        "check.$": "$.Payload"
+      },
+      "ResultPath": "$.checkAfter30",
+      "Next": "EscalateAfter30"
+    },
+    "EscalateAfter30": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.checkAfter30.check.shouldEscalate",
+          "BooleanEquals": false,
+          "Next": "WorkflowComplete"
+        }
+      ],
+      "Default": "SendDay30"
+    },
+    "SendDay30": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "alyson-training-email-send-lambda",
+        "Payload": {
+          "action": "sendEmail",
+          "email_type": "escalation_day30",
+          "template_name": "escalation_day30",
+          "template_key": "escalation_day30",
+          "assignment_id.$": "$.assignment_id",
+          "user_id.$": "$.user_id",
+          "recipient_email.$": "$.recipient_email",
+          "placeholders.$": "$.placeholders",
+          "audience": "admin"
+        }
+      },
+      "ResultSelector": {
+        "sendResult.$": "$.Payload"
+      },
+      "ResultPath": "$.day30",
+      "Next": "WorkflowComplete"
+    },
+    "WorkflowComplete": {
+      "Type": "Succeed"
+    }
+  }
+}

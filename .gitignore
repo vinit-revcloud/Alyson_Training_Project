@@ -12,6 +12,8 @@ storage
 dist
 dist-ssr
 .output
+.vercel/output
+.vercel/cache
 .vinxi
 .tanstack/**
 .nitro
