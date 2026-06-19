@@ -4,7 +4,7 @@ Step-by-step guide to deploy Alyson Training on Vercel for HR and hiring manager
 
 ## Prerequisites
 
-- [Vercel account](https://vercel.com) (Pro recommended for cron every 5 minutes)
+- [Vercel account](https://vercel.com) (Hobby works — use free external cron for emails; Pro can use native Vercel Cron)
 - [Neon](https://neon.tech) project with Auth + Data API enabled
 - AWS credentials for SES (invite emails)
 - DeepSeek and/or OpenRouter API key (AI evaluation)
@@ -125,20 +125,44 @@ curl https://your-app.vercel.app/api/health
 
 ---
 
-## 6. Email cron (Vercel Cron)
+## 6. Email cron (required for invite emails)
 
-[`vercel.json`](../vercel.json) schedules:
+The app drains the email queue via:
 
 ```
-GET /api/internal/cron/tick  every 5 minutes
+GET or POST https://<APP_BASE_URL>/api/internal/cron/tick
+Authorization: Bearer <CRON_SECRET>
 ```
 
-Requirements:
+`CRON_SECRET` must be set in Vercel env vars.
 
-- `CRON_SECRET` must be set in Vercel env (Vercel adds the Bearer header automatically).
-- **Pro plan** needed for cron more often than once per day. On **Hobby**, use an external cron service (e.g. [cron-job.org](https://cron-job.org)) to `POST` the same URL with header `Authorization: Bearer <CRON_SECRET>` every 5 minutes.
+### Hobby plan (default) — use external cron
 
-After deploy, check **Notifications** in the app — queued emails should drain after cron runs.
+Vercel **Hobby** only allows **once-per-day** native cron jobs, so [`vercel.json`](../vercel.json) does **not** include a cron schedule (avoids deploy errors).
+
+Use a free external scheduler instead — e.g. [cron-job.org](https://cron-job.org):
+
+1. Create account → **Create cronjob**
+2. **URL:** `https://YOUR-APP.vercel.app/api/internal/cron/tick`
+3. **Schedule:** every 5 minutes
+4. **Request method:** GET (or POST)
+5. **Headers:** `Authorization` = `Bearer YOUR_CRON_SECRET` (same value as Vercel env)
+6. Save and enable
+
+Test manually:
+
+```bash
+curl -X POST "https://YOUR-APP.vercel.app/api/internal/cron/tick" \
+  -H "Authorization: Bearer YOUR_CRON_SECRET"
+```
+
+Or locally: `npm run email:cron`
+
+After the first run, check **Notifications** in the app — queued emails should drain.
+
+### Pro plan — optional native Vercel Cron
+
+Merge [`vercel.cron.pro.example.json`](../vercel.cron.pro.example.json) into `vercel.json` to run every 5 minutes on Vercel (Pro unlocks sub-daily schedules). Vercel sends the `Authorization: Bearer <CRON_SECRET>` header automatically when `CRON_SECRET` is set.
 
 ---
 
@@ -189,7 +213,7 @@ SES is `us-east-1`; Lambda workflow (optional) is `us-west-2`. Ensure IAM allows
 | Sign-in does nothing | Add Vercel URL to Neon **Trusted domains** |
 | Wrong links in emails | Set `APP_BASE_URL` to production domain and redeploy |
 | Cron 401 | Ensure `CRON_SECRET` is set in Vercel env |
-| Cron not running | Pro plan for 5-min schedule; check Vercel → Cron tab |
+| Cron not running | Set up [cron-job.org](#6-email-cron-required-for-invite-emails) on Hobby, or add Pro cron from `vercel.cron.pro.example.json` |
 | 500 on first load | Check Vercel **Functions** logs; verify all required env vars |
 
 ---
