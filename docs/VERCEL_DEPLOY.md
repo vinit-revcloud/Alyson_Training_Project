@@ -53,6 +53,8 @@ In **Project Settings → Environment Variables**, add these for **Production** 
 |----------|-------|
 | `VITE_NEON_AUTH_URL` | From Neon Console → Auth. **Build-time** — redeploy after change. |
 | `VITE_NEON_DATA_API_URL` | From Neon Console → Data API. **Build-time**. |
+| `NEON_AUTH_URL` | Same value as `VITE_NEON_AUTH_URL` — **runtime** fallback for server JWT checks. |
+| `NEON_DATA_API_URL` | Same value as `VITE_NEON_DATA_API_URL` — **runtime** fallback. |
 | `DATABASE_URL` | Neon Postgres connection string (server only). |
 | `CRON_SECRET` | Long random string — secures cron + asset URLs. Vercel Cron sends `Authorization: Bearer <CRON_SECRET>` automatically when this is set. |
 | `APP_BASE_URL` | Your production URL, e.g. `https://alyson-training.vercel.app` or custom domain **without trailing slash**. Required for correct email/magic links on a custom domain. |
@@ -207,13 +209,34 @@ SES is `us-east-1`; Lambda workflow (optional) is `us-west-2`. Ensure IAM allows
 
 ## Troubleshooting
 
+### Auth not working after deploy
+
+1. **Neon trusted domains** — In Neon Console → Auth, add **every** URL you sign in from:
+   - `https://your-project.vercel.app`
+   - Your custom domain (if used)
+   - Preview URLs if you test preview deploys
+   - Google OAuth **Authorized JavaScript origins** must list the same URLs.
+
+2. **Env vars** — All four must be set in Vercel (Production):
+   - `VITE_NEON_AUTH_URL` and `VITE_NEON_DATA_API_URL` (required at **build** — redeploy after adding)
+   - `NEON_AUTH_URL` and `NEON_DATA_API_URL` (same values, for **runtime** server auth)
+   - `DATABASE_URL` (bootstrap after sign-in)
+
+3. **`APP_BASE_URL`** — Must match the URL in your browser (e.g. `https://your-project.vercel.app`, no trailing slash). If you use a custom domain, update this and redeploy.
+
+4. **Redeploy** — Changing `VITE_*` vars requires a **new deployment** (they are baked into the client bundle).
+
+5. **Check Vercel function logs** — Failed bootstrap often shows `Unauthorized`, `invalid token`, or CSRF errors.
+
 | Issue | Fix |
 |-------|-----|
-| Build fails on Vercel | Run `npm run build` locally; fix errors first |
-| Sign-in does nothing | Add Vercel URL to Neon **Trusted domains** |
+| Sign-in does nothing / redirects back to `/auth` | Add Vercel URL to Neon **Trusted domains** |
+| "Sign-in succeeded but no session" | Neon trusted domains + Google OAuth origins |
+| Stuck on "Setting up your workspace…" | Set `DATABASE_URL`, `NEON_AUTH_URL`; check function logs |
+| "No Access" after sign-in | Admin must send invite from `/invites` or set `BOOTSTRAP_ADMIN_EMAILS` |
 | Wrong links in emails | Set `APP_BASE_URL` to production domain and redeploy |
 | Cron 401 | Ensure `CRON_SECRET` is set in Vercel env |
-| Cron not running | Set up [cron-job.org](#6-email-cron-required-for-invite-emails) on Hobby, or add Pro cron from `vercel.cron.pro.example.json` |
+| Cron not running | Set up [cron-job.org](#6-email-cron-required-for-invite-emails) on Hobby |
 | 500 on first load | Check Vercel **Functions** logs; verify all required env vars |
 
 ---

@@ -1,10 +1,14 @@
 import { createCsrfMiddleware, createStart, createMiddleware } from "@tanstack/react-start";
 
 import { attachDbAuth } from "@/integrations/neon/auth-attacher";
+import { getTrustedPublicOrigins } from "@/lib/trusted-origins";
 import { renderErrorPage } from "./lib/error-page";
+
+const csrfOrigins = getTrustedPublicOrigins();
 
 const csrfMiddleware = createCsrfMiddleware({
   filter: (ctx) => ctx.handlerType === "serverFn",
+  ...(csrfOrigins.length ? { origin: csrfOrigins } : {}),
 });
 
 const errorMiddleware = createMiddleware().server(async ({ next }) => {
