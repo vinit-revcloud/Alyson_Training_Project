@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireDbAuth } from "@/integrations/neon/auth-middleware";
 import { getPgPool } from "@/lib/pg.server";
+import { assertLearnerCourseAccess } from "@/lib/learn-access.server";
 import type { LearnerAssignment, LearnerCourse, StudyCard } from "@/lib/learn-api";
 
 export const listMyAssignmentsFn = createServerFn({ method: "POST" })
@@ -166,7 +167,8 @@ export const recordStudyActivityFn = createServerFn({ method: "POST" })
 export const getCourseStudyCardsFn = createServerFn({ method: "POST" })
   .middleware([requireDbAuth])
   .inputValidator((data: unknown) => z.object({ courseId: z.string().uuid() }).parse(data))
-  .handler(async ({ data }): Promise<StudyCard[]> => {
+  .handler(async ({ data, context }): Promise<StudyCard[]> => {
+    await assertLearnerCourseAccess(context.userId, data.courseId);
     const pool = getPgPool();
     const classesRes = await pool.query<{ id: string; name: string; summary: string }>(
       `SELECT id, name, summary FROM classes

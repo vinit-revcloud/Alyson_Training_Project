@@ -37,6 +37,10 @@ import { Calendar, PlayCircle, Plus, Trash2, User } from "lucide-react";
 import { BulkInterviewImportDialog } from "@/components/hiring/BulkInterviewImportDialog";
 import { HiringWorkflowStrip } from "@/components/hiring/HiringWorkflowStrip";
 import { InterviewGuide } from "@/components/hiring/InterviewGuide";
+import { QueryLoadError } from "@/components/admin/QueryLoadError";
+import { INTERVIEW_LIST_POLL_MS, INTERVIEW_POLL_OPTS } from "@/lib/query-options";
+import { useSession } from "@/lib/auth";
+import { isExecutiveReadOnly } from "@/lib/role-access";
 import {
   createInterviewSessionFn,
   deleteInterviewSessionFn,
@@ -78,13 +82,16 @@ const STATUS_STYLE: Record<InterviewSessionStatus, string> = {
 
 function InterviewsPage() {
   const qc = useQueryClient();
+  const { roles } = useSession();
+  const readOnly = isExecutiveReadOnly(roles);
   const listFn = useServerFn(listInterviewSessionsFn);
   const [deleteTarget, setDeleteTarget] = useState<InterviewSessionListItem | null>(null);
   const deleteFn = useServerFn(deleteInterviewSessionFn);
-  const { data: sessions = [], isLoading } = useQuery({
+  const { data: sessions = [], isLoading, isError, refetch } = useQuery({
     queryKey: ["interview-sessions"],
     queryFn: () => listFn(),
-    refetchInterval: 5000,
+    refetchInterval: INTERVIEW_LIST_POLL_MS,
+    ...INTERVIEW_POLL_OPTS,
   });
 
   const remove = useMutation({
@@ -98,7 +105,14 @@ function InterviewsPage() {
   });
 
   return (
-    <AdminLayout title="Interviews" subtitle="Schedule and proctor external candidate tests">
+    <AdminLayout
+      title="Interviews"
+      subtitle={
+        readOnly
+          ? "Read-only view of candidate interview sessions"
+          : "Schedule and proctor external candidate tests"
+      }
+    >
       <HiringWorkflowStrip className="mb-5" />
       <InterviewGuide variant="hub" className="mb-5" />
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -109,21 +123,29 @@ function InterviewsPage() {
           <Button asChild variant="outline" size="sm">
             <Link to="/interviews/assessments">Interview tests</Link>
           </Button>
-          <Button asChild variant="outline" size="sm">
-            <Link to="/assessments/builder" search={{ purpose: "interview" }}>
-              Create interview test
-            </Link>
-          </Button>
-          <BulkInterviewImportDialog
-            onImported={() => qc.invalidateQueries({ queryKey: ["interview-sessions"] })}
-          />
-          <ScheduleDialog onCreated={() => qc.invalidateQueries({ queryKey: ["interview-sessions"] })} />
+          {!readOnly ? (
+            <>
+              <Button asChild variant="outline" size="sm">
+                <Link to="/assessments/builder" search={{ purpose: "interview" }}>
+                  Create interview test
+                </Link>
+              </Button>
+              <BulkInterviewImportDialog
+                onImported={() => qc.invalidateQueries({ queryKey: ["interview-sessions"] })}
+              />
+              <ScheduleDialog onCreated={() => qc.invalidateQueries({ queryKey: ["interview-sessions"] })} />
+            </>
+          ) : null}
         </div>
       </div>
 
       <Card className="overflow-hidden rounded-xl border-border shadow-soft">
         {isLoading ? (
           <div className="p-8 text-center text-sm text-muted-foreground">Loading…</div>
+        ) : isError ? (
+          <div className="p-6">
+            <QueryLoadError message="Could not load interview sessions" onRetry={() => void refetch()} />
+          </div>
         ) : sessions.length === 0 ? (
           <div className="p-8 text-center text-sm text-muted-foreground">
             No interview sessions yet. Schedule one to send a candidate a magic link.
@@ -134,6 +156,7 @@ function InterviewsPage() {
               <InterviewSessionRow
                 key={s.id}
                 session={s}
+                readOnly={readOnly}
                 onDelete={() => setDeleteTarget(s)}
               />
             ))}
@@ -173,9 +196,11 @@ function InterviewsPage() {
 
 function InterviewSessionRow({
   session: s,
+  readOnly,
   onDelete,
 }: {
   session: InterviewSessionListItem;
+  readOnly: boolean;
   onDelete: () => void;
 }) {
   const qc = useQueryClient();
@@ -230,7 +255,7 @@ function InterviewSessionRow({
           {REC_LABEL[s.final_recommendation as HireRecommendation]}
         </Badge>
       )}
-      {canOpen ? (
+      {canOpen && !readOnly ? (
         <Button
           size="sm"
           className="gap-1.5 shrink-0"
@@ -250,6 +275,7 @@ function InterviewSessionRow({
           Manage
         </Link>
       </Button>
+      {!readOnly ? (
       <Button
         size="sm"
         variant="outline"
@@ -263,6 +289,7 @@ function InterviewSessionRow({
       >
         <Trash2 className="h-3.5 w-3.5" />
       </Button>
+      ) : null}
     </div>
   );
 }
@@ -289,7 +316,7 @@ function ScheduleDialog({ onCreated }: { onCreated: () => void }) {
   const [createdMode, setCreatedMode] = useState<AssessmentMode | null>(null);
 
   const listAssessments = useServerFn(listInterviewAssessmentsFn);
-  const { data: assessments = [] } = useQuery({
+  const { data: assessments = [], isError: assessmentsError, refetch: refetchAssessments } = useQuery({
     queryKey: ["interview-assessments"],
     queryFn: () => listAssessments(),
     enabled: open,
@@ -437,10 +464,18 @@ function ScheduleDialog({ onCreated }: { onCreated: () => void }) {
             </div>
             <Select value={assessmentId} onValueChange={setAssessmentId}>
               <SelectTrigger>
-                <SelectValue placeholder="Interview assessment" />
+                <SelectValue
+                  placeholder={
+                    assessmentsError ? "Failed to load assessments" : "Interview assessment"
+                  }
+                />
               </SelectTrigger>
               <SelectContent>
-                {assessments.length === 0 ? (
+                {assessmentsError ? (
+                  <SelectItem value="_err" disabled>
+                    Could not load — close and reopen dialog to retry
+                  </SelectItem>
+                ) : assessments.length === 0 ? (
                   <SelectItem value="_none" disabled>
                     No interview assessments — create one with purpose &quot;interview&quot;
                   </SelectItem>

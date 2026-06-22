@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { AdminLayout } from "@/components/admin/AdminLayout";
+import { QueryLoadError } from "@/components/admin/QueryLoadError";
 import { HiringWorkflowStrip } from "@/components/hiring/HiringWorkflowStrip";
 import { InterviewGuide } from "@/components/hiring/InterviewGuide";
 import { TestBuilder } from "@/components/test-builder/TestBuilder";
@@ -22,8 +23,11 @@ interface BuilderSearch {
 }
 
 const ALLOWED_DIFF = ["Beginner", "Intermediate", "Advanced"] as const;
-const numOrUndef = (v: unknown) =>
-  v === undefined || v === null || v === "" ? undefined : Number(v);
+const numOrUndef = (v: unknown) => {
+  if (v === undefined || v === null || v === "") return undefined;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : undefined;
+};
 const strOrUndef = (v: unknown) =>
   typeof v === "string" && v.length ? v : undefined;
 
@@ -52,7 +56,7 @@ function BuilderPage() {
   const preset = Route.useSearch();
   const topics = preset.topics ? preset.topics.split(",").filter(Boolean) : [];
   const hasPreset = Boolean(preset.classId || preset.className);
-  const { data: classSeed, isLoading: loadingSeed } = useQuery({
+  const { data: classSeed, isLoading: loadingSeed, isError: seedError, refetch: refetchSeed } = useQuery({
     queryKey: ["class-assessment-seed", preset.classId],
     queryFn: () => getClassAssessmentSeed(preset.classId!),
     enabled: Boolean(preset.classId),
@@ -94,6 +98,13 @@ function BuilderPage() {
             </p>
           </div>
         </div>
+      ) : null}
+
+      {seedError ? (
+        <QueryLoadError
+          message="Could not load class context for this builder"
+          onRetry={() => void refetchSeed()}
+        />
       ) : null}
 
       {hasPreset ? (

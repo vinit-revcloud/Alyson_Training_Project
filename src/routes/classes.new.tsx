@@ -2,7 +2,9 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { z } from "zod";
 import { AdminLayout } from "@/components/admin/AdminLayout";
+import { QueryLoadError } from "@/components/admin/QueryLoadError";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,9 +57,12 @@ import type { ClassSuggestion } from "@/lib/class-ai.functions";
 
 export const Route = createFileRoute("/classes/new")({
   head: () => ({ meta: [{ title: "Create class — Alyson Training Project" }] }),
-  validateSearch: (search: Record<string, unknown>) => ({
-    courseId: typeof search.courseId === "string" && search.courseId.trim() ? search.courseId.trim() : undefined,
-  }),
+  validateSearch: (search: Record<string, unknown>) => {
+    const raw = typeof search.courseId === "string" ? search.courseId.trim() : undefined;
+    const courseId =
+      raw && z.string().uuid().safeParse(raw).success ? raw : undefined;
+    return { courseId };
+  },
   component: NewClassWizard,
 });
 
@@ -109,11 +114,15 @@ function NewClassWizard() {
   const navigate = useNavigate();
   const { courseId: prefillCourseId } = Route.useSearch();
   const qc = useQueryClient();
-  const { data: existingCourses = [] } = useQuery({
+  const { data: existingCourses = [], isError: coursesError, refetch: refetchCourses } = useQuery({
     queryKey: ["courses"],
     queryFn: listCourses,
   });
-  const { data: prefillCourse } = useQuery({
+  const {
+    data: prefillCourse,
+    isError: prefillError,
+    refetch: refetchPrefill,
+  } = useQuery({
     queryKey: ["course", prefillCourseId],
     queryFn: () => (prefillCourseId ? getCourse(prefillCourseId) : Promise.resolve(null)),
     enabled: !!prefillCourseId,
@@ -394,6 +403,19 @@ function NewClassWizard() {
         </div>
       }
     >
+      {coursesError || prefillError ? (
+        <QueryLoadError
+          message={
+            prefillError
+              ? "Could not load the course to pre-fill this class"
+              : "Could not load existing courses"
+          }
+          onRetry={() => {
+            void refetchCourses();
+            if (prefillCourseId) void refetchPrefill();
+          }}
+        />
+      ) : null}
       <div className="mb-6">
         <AIClassAssistant onApply={applyAISuggestion} />
       </div>

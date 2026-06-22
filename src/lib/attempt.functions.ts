@@ -268,3 +268,27 @@ export const getLearnerAssignmentFn = createServerFn({ method: "POST" })
     if (assignment.learner_user_id !== userId) throw new Error("Not authorized");
     return assignment;
   });
+
+/** Learner-safe assessment metadata for the attempt page (no correct answers). */
+export const getLearnerAssessmentMetadataFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => AssignmentIdInput.parse(d))
+  .handler(async ({ data, context }) => {
+    const { userId } = context;
+    const { data: assignment, error: aErr } = await supabaseAdmin
+      .from("assessment_assignments")
+      .select("learner_user_id, assessment_id")
+      .eq("id", data.assignmentId)
+      .maybeSingle();
+    if (aErr) throw new Error(aErr.message);
+    if (!assignment) return null;
+    if (assignment.learner_user_id !== userId) throw new Error("Not authorized");
+
+    const { data: assessment, error: qErr } = await supabaseAdmin
+      .from("assessments")
+      .select("id, title, pass_mark, duration_min, description")
+      .eq("id", assignment.assessment_id)
+      .maybeSingle();
+    if (qErr) throw new Error(qErr.message);
+    return assessment;
+  });

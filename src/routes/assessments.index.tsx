@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AdminLayout } from "@/components/admin/AdminLayout";
+import { QueryLoadError } from "@/components/admin/QueryLoadError";
 import { TrainingWorkflowStrip } from "@/components/training/TrainingWorkflowStrip";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -114,7 +115,7 @@ function AssessmentsPage() {
   const [assignTarget, setAssignTarget] = useState<AssessmentSummaryRow | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<AssessmentSummaryRow | null>(null);
 
-  const { data: rows = [], isLoading } = useQuery({
+  const { data: rows = [], isLoading, isError, refetch } = useQuery({
     queryKey: ["assessments-stats"],
     queryFn: listAllAssessmentsWithStats,
   });
@@ -238,6 +239,9 @@ function AssessmentsPage() {
     >
       <TrainingWorkflowStrip className="mb-1" />
       <div className="space-y-4">
+        {isError ? (
+          <QueryLoadError message="Could not load assessments" onRetry={() => void refetch()} />
+        ) : null}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           <StatCard label="Total" value={stats.total} />
           <StatCard label="Open" value={stats.open} tone="emerald" />
@@ -390,6 +394,12 @@ function AssessmentsPage() {
                   <tr>
                     <td colSpan={9} className="px-5 py-10 text-center text-muted-foreground">
                       Loading assessments…
+                    </td>
+                  </tr>
+                ) : isError ? (
+                  <tr>
+                    <td colSpan={9} className="px-5 py-10 text-center text-muted-foreground">
+                      Assessment list unavailable — use Retry above.
                     </td>
                   </tr>
                 ) : filtered.length === 0 ? (

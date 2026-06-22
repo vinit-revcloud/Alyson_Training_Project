@@ -2,6 +2,7 @@ import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
+import { z } from "zod";
 import {
   DndContext,
   DragOverlay,
@@ -24,6 +25,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { AdminLayout } from "@/components/admin/AdminLayout";
+import { QueryLoadError } from "@/components/admin/QueryLoadError";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -68,7 +70,10 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
+const courseParamsSchema = z.object({ courseId: z.string().uuid() });
+
 export const Route = createFileRoute("/courses/$courseId")({
+  params: courseParamsSchema,
   component: CourseDetail,
   notFoundComponent: () => (
     <AdminLayout title="Course not found">
@@ -84,17 +89,33 @@ function CourseDetail() {
   const qc = useQueryClient();
   const [bulkOpen, setBulkOpen] = useState(false);
 
-  const { data: course, isLoading: courseLoading } = useQuery({
+  const {
+    data: course,
+    isLoading: courseLoading,
+    isError: courseError,
+    refetch: refetchCourse,
+  } = useQuery({
     queryKey: ["course", courseId],
     queryFn: () => getCourse(courseId),
   });
-  const { data: tree = [], isLoading: treeLoading } = useQuery({
+  const {
+    data: tree = [],
+    isLoading: treeLoading,
+    isError: treeError,
+    refetch: refetchTree,
+  } = useQuery({
     queryKey: ["course-tree", courseId],
     queryFn: () => getCourseTree(courseId),
+    enabled: !!course,
   });
-  const { data: assignedDepts = [] } = useQuery({
+  const {
+    data: assignedDepts = [],
+    isError: deptError,
+    refetch: refetchDepts,
+  } = useQuery({
     queryKey: ["course-departments", courseId],
     queryFn: () => getCourseDepartments(courseId),
+    enabled: !!course,
   });
 
   const setCoreFn = useServerFn(setCourseCoreOnboardingFn);
@@ -107,12 +128,32 @@ function CourseDetail() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  if (!courseLoading && !course) throw notFound();
+  if (courseLoading) {
+    return (
+      <AdminLayout title="Course" subtitle="Loading course details…">
+        <Card className="h-28 animate-pulse rounded-xl border-border bg-muted/30" />
+        <Card className="mt-5 h-48 animate-pulse rounded-xl border-border bg-muted/30" />
+      </AdminLayout>
+    );
+  }
+
+  if (courseError) {
+    return (
+      <AdminLayout title="Course">
+        <QueryLoadError message="Could not load this course" onRetry={() => void refetchCourse()} />
+        <Link to="/courses" className="mt-4 inline-flex items-center gap-1 text-sm text-primary hover:underline">
+          <ArrowLeft className="h-3.5 w-3.5" /> Back to courses
+        </Link>
+      </AdminLayout>
+    );
+  }
+
+  if (!course) throw notFound();
 
   return (
     <AdminLayout
-      title={course?.title ?? "Course"}
-      subtitle={course ? `${course.role} · ${course.level}` : ""}
+      title={course.title}
+      subtitle={`${course.role} · ${course.level}`}
       actions={
         <div className="flex items-center gap-2">
           <Button
@@ -177,6 +218,16 @@ function CourseDetail() {
           </Card>
         ) : null}
 
+        {treeError || deptError ? (
+          <QueryLoadError
+            message="Some course content failed to load"
+            onRetry={() => {
+              void refetchTree();
+              void refetchDepts();
+            }}
+          />
+        ) : null}
+
         <DepartmentPanel
           courseId={courseId}
           assigned={assignedDepts}
@@ -197,7 +248,7 @@ function CourseDetail() {
         open={bulkOpen}
         onOpenChange={setBulkOpen}
         courseId={courseId}
-        courseTitle={course?.title}
+        courseTitle={course.title}
       />
     </AdminLayout>
   );

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AdminLayout } from "@/components/admin/AdminLayout";
+import { QueryLoadError } from "@/components/admin/QueryLoadError";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -74,7 +75,7 @@ const emptyDraft: TemplateInput = {
 
 function TemplatesPage() {
   const qc = useQueryClient();
-  const { data: templates = [], isLoading } = useQuery({
+  const { data: templates = [], isLoading, isError, refetch } = useQuery({
     queryKey: ["assessment-templates"],
     queryFn: listTemplates,
   });
@@ -154,6 +155,9 @@ function TemplatesPage() {
         </Button>
       }
     >
+      {isError ? (
+        <QueryLoadError message="Could not load templates" onRetry={() => void refetch()} />
+      ) : null}
       <Card className="rounded-xl border-border shadow-soft">
         <Table>
           <TableHeader>
@@ -174,6 +178,12 @@ function TemplatesPage() {
               <TableRow>
                 <TableCell colSpan={9} className="text-center text-muted-foreground">
                   Loading…
+                </TableCell>
+              </TableRow>
+            ) : isError ? (
+              <TableRow>
+                <TableCell colSpan={9} className="text-center text-muted-foreground">
+                  Templates unavailable — use Retry above.
                 </TableCell>
               </TableRow>
             ) : templates.length === 0 ? (

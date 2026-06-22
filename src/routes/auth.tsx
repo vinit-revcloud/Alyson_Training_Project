@@ -43,14 +43,20 @@ function AuthPage() {
   }, [searchToken]);
 
   useEffect(() => {
+    if (searchMode === "signup" && !searchToken) setMode("signin");
+  }, [searchMode, searchToken]);
+
+  useEffect(() => {
     if (searchEmail) setEmail(searchEmail);
   }, [searchEmail]);
 
   const { data: invitePreview } = useQuery({
-    queryKey: ["invite-preview", searchToken, email],
+    queryKey: ["invite-preview", searchToken],
     queryFn: () =>
       previewInvite(searchToken, email.trim().toLowerCase() || undefined),
     enabled: !!searchToken,
+    staleTime: 60_000,
+    retry: 1,
   });
 
   useEffect(() => {
@@ -325,15 +331,23 @@ function AuthPage() {
         <div className="mt-5 text-center text-[12px]" style={{ color: "#6B7280" }}>
           {mode === "signin" ? (
             <>
-              No account?{" "}
-              <button
-                type="button"
-                onClick={() => setMode("signup")}
-                className="font-semibold hover:underline"
-                style={{ color: "#3B82F6" }}
-              >
-                Sign up
-              </button>
+              {searchToken ? (
+                <>
+                  Wrong mode?{" "}
+                  <button
+                    type="button"
+                    onClick={() => setMode("signup")}
+                    className="font-semibold hover:underline"
+                    style={{ color: "#3B82F6" }}
+                  >
+                    Create account with this invite
+                  </button>
+                </>
+              ) : (
+                <>
+                  Need an account? Ask an admin to send an invite link — open signup is not enabled.
+                </>
+              )}
             </>
           ) : (
             <>

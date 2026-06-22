@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { getMyTrialProjectFn, submitTrialProjectFn } from "@/lib/hiring-pipeline/hiring-pipeline.functions";
 import { ceoReviewStatusLabel } from "@/lib/hiring-pipeline/hiring-pipeline.shared";
+import { QueryLoadError } from "@/components/admin/QueryLoadError";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/learn/trial")({
@@ -19,7 +20,7 @@ function TrialProjectPage() {
   const submit = useServerFn(submitTrialProjectFn);
   const [notes, setNotes] = useState("");
 
-  const { data: trial, isLoading, refetch } = useQuery({
+  const { data: trial, isLoading, isError, refetch } = useQuery({
     queryKey: ["my-trial-project"],
     queryFn: () => load(),
   });
@@ -35,6 +36,14 @@ function TrialProjectPage() {
 
   if (isLoading) {
     return <p className="p-6 text-sm text-muted-foreground">Loading trial project…</p>;
+  }
+
+  if (isError) {
+    return (
+      <div className="m-6">
+        <QueryLoadError message="Could not load your trial project" onRetry={() => void refetch()} />
+      </div>
+    );
   }
 
   if (!trial) {

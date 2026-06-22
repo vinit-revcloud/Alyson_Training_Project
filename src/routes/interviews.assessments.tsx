@@ -2,12 +2,15 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { AdminLayout } from "@/components/admin/AdminLayout";
+import { QueryLoadError } from "@/components/admin/QueryLoadError";
 import { HiringWorkflowStrip } from "@/components/hiring/HiringWorkflowStrip";
 import { InterviewGuide } from "@/components/hiring/InterviewGuide";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { listInterviewAssessmentsFn } from "@/lib/interview/interview.functions";
+import { useSession } from "@/lib/auth";
+import { isExecutiveReadOnly } from "@/lib/role-access";
 import { Eye, Plus, Video } from "lucide-react";
 
 export const Route = createFileRoute("/interviews/assessments")({
@@ -16,8 +19,10 @@ export const Route = createFileRoute("/interviews/assessments")({
 });
 
 function InterviewAssessmentsPage() {
+  const { roles } = useSession();
+  const readOnly = isExecutiveReadOnly(roles);
   const listFn = useServerFn(listInterviewAssessmentsFn);
-  const { data: assessments = [], isLoading } = useQuery({
+  const { data: assessments = [], isLoading, isError, refetch } = useQuery({
     queryKey: ["interview-assessments"],
     queryFn: () => listFn(),
   });
@@ -34,21 +39,31 @@ function InterviewAssessmentsPage() {
               Schedule interview
             </Link>
           </Button>
-          <Button asChild size="sm" className="gap-1.5">
-            <Link to="/assessments/builder" search={{ purpose: "interview" }}>
-              <Plus className="h-3.5 w-3.5" />
-              Create interview test
-            </Link>
-          </Button>
+          {!readOnly ? (
+            <Button asChild size="sm" className="gap-1.5">
+              <Link to="/assessments/builder" search={{ purpose: "interview" }}>
+                <Plus className="h-3.5 w-3.5" />
+                Create interview test
+              </Link>
+            </Button>
+          ) : null}
         </div>
       }
     >
       <HiringWorkflowStrip className="mb-5" />
       <InterviewGuide variant="tests" className="mb-5" />
 
+      {isError ? (
+        <QueryLoadError message="Could not load interview tests" onRetry={() => void refetch()} />
+      ) : null}
+
       <Card className="overflow-hidden rounded-xl border-border shadow-soft">
         {isLoading ? (
           <div className="p-8 text-center text-sm text-muted-foreground">Loading…</div>
+        ) : isError ? (
+          <div className="p-8 text-center text-sm text-muted-foreground">
+            Interview tests unavailable — use Retry above.
+          </div>
         ) : assessments.length === 0 ? (
           <div className="space-y-3 p-8 text-center text-sm text-muted-foreground">
             <p>No interview tests yet.</p>
@@ -56,11 +71,13 @@ function InterviewAssessmentsPage() {
               Create a test here, then schedule it for a candidate on the Interviews page. Tests stay
               in the interview pool unless you explicitly link one to a course when building.
             </p>
-            <Button asChild size="sm" className="mt-2">
-              <Link to="/assessments/builder" search={{ purpose: "interview" }}>
-                Create your first interview test
-              </Link>
-            </Button>
+            {!readOnly ? (
+              <Button asChild size="sm" className="mt-2">
+                <Link to="/assessments/builder" search={{ purpose: "interview" }}>
+                  Create your first interview test
+                </Link>
+              </Button>
+            ) : null}
           </div>
         ) : (
           <div className="divide-y divide-border">

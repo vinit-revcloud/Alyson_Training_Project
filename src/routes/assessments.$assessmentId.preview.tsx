@@ -2,7 +2,9 @@ import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { z } from "zod";
 import { AdminLayout } from "@/components/admin/AdminLayout";
+import { QueryLoadError } from "@/components/admin/QueryLoadError";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,7 +29,10 @@ import {
 } from "@/lib/assessments-api";
 import { getClass } from "@/lib/classes-api";
 
+const assessmentParamsSchema = z.object({ assessmentId: z.string().uuid() });
+
 export const Route = createFileRoute("/assessments/$assessmentId/preview")({
+  params: assessmentParamsSchema,
   head: () => ({ meta: [{ title: "Candidate Preview — Alyson" }] }),
   component: PreviewPage,
 });
@@ -35,21 +40,25 @@ export const Route = createFileRoute("/assessments/$assessmentId/preview")({
 function PreviewPage() {
   const { assessmentId } = Route.useParams();
 
-  const { data: assessment, isLoading } = useQuery({
+  const {
+    data: assessment,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ["assessment", assessmentId],
     queryFn: () => getAssessment(assessmentId),
   });
-  const { data: rows = [] } = useQuery({
+  const { data: rows = [], isError: questionsError, refetch: refetchQuestions } = useQuery({
     queryKey: ["assessment-questions", assessmentId],
     queryFn: () => listAssessmentQuestions(assessmentId),
+    enabled: !!assessment,
   });
   const { data: cls } = useQuery({
     queryKey: ["class", assessment?.class_id],
     queryFn: () => (assessment?.class_id ? getClass(assessment.class_id) : Promise.resolve(null)),
     enabled: !!assessment?.class_id,
   });
-
-  if (!isLoading && !assessment) throw notFound();
 
   const questions = useMemo(() => rows.map(questionRowToQuestion), [rows]);
 
@@ -78,6 +87,29 @@ function PreviewPage() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  if (isLoading) {
+    return (
+      <AdminLayout title="Candidate Preview" subtitle="Loading assessment…">
+        <Card className="mx-auto max-w-3xl h-48 animate-pulse rounded-2xl border-border bg-muted/30" />
+      </AdminLayout>
+    );
+  }
+
+  if (isError) {
+    return (
+      <AdminLayout title="Candidate Preview">
+        <div className="mx-auto max-w-3xl">
+          <QueryLoadError message="Could not load this assessment" onRetry={() => void refetch()} />
+          <Link to="/assessments" className="mt-4 inline-flex items-center gap-1 text-sm text-primary hover:underline">
+            <ArrowLeft className="h-3.5 w-3.5" /> Back to assessments
+          </Link>
+        </div>
+      </AdminLayout>
+    );
+  }
+
+  if (!assessment) throw notFound();
+
   return (
     <AdminLayout
       title="Candidate Preview"
@@ -93,7 +125,7 @@ function PreviewPage() {
             {showKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
             {showKey ? "Hide answer key" : "Show answer key"}
           </Button>
-          {assessment?.class_id ? (
+          {assessment.class_id ? (
             <Button asChild variant="outline" size="sm" className="h-9 gap-1.5 rounded-lg">
               <Link to="/classes/$classId" params={{ classId: assessment.class_id }}>
                 <ArrowLeft className="h-3.5 w-3.5" /> Back to class
@@ -104,6 +136,13 @@ function PreviewPage() {
       }
     >
       <div className="mx-auto max-w-3xl space-y-5">
+        {questionsError ? (
+          <QueryLoadError
+            message="Could not load assessment questions"
+            onRetry={() => void refetchQuestions()}
+          />
+        ) : null}
+
         {/* Header card — looks like the candidate-facing test cover */}
         <Card className="overflow-hidden rounded-2xl border-border shadow-soft">
           <div className="bg-gradient-hero p-6 text-primary-foreground">
@@ -111,22 +150,22 @@ function PreviewPage() {
               <Sparkles className="h-3 w-3" /> Alyson Training · Final Assessment
             </div>
             <h1 className="mt-3 font-display text-2xl leading-tight md:text-3xl">
-              {assessment?.title ?? "Loading…"}
+              {assessment.title}
             </h1>
             {cls ? (
               <p className="mt-1 text-[12.5px] opacity-85">
-                {cls.name} · {assessment?.role || cls.audience}
+                {cls.name} · {assessment.role || cls.audience}
               </p>
             ) : null}
             <div className="mt-4 flex flex-wrap gap-1.5 text-[11px]">
               <Pill>
                 <Clock className="mr-1 h-3 w-3" />
-                {assessment?.duration_min ?? 45} min
+                {assessment.duration_min ?? 45} min
               </Pill>
               <Pill>{questions.length} questions</Pill>
-              <Pill>Pass {assessment?.pass_mark ?? 60}%</Pill>
-              <Pill>{assessment?.difficulty ?? "Intermediate"}</Pill>
-              <Pill>Status: {assessment?.status ?? "draft"}</Pill>
+              <Pill>Pass {assessment.pass_mark ?? 60}%</Pill>
+              <Pill>{assessment.difficulty ?? "Intermediate"}</Pill>
+              <Pill>Status: {assessment.status ?? "draft"}</Pill>
             </div>
           </div>
           <div className="p-5">
@@ -163,7 +202,7 @@ function PreviewPage() {
               </div>
               <div className="text-[11px] text-muted-foreground">
                 Subjective answers would be graded by the trainer. Pass mark{" "}
-                {assessment?.pass_mark}%.
+                {assessment.pass_mark}%.
               </div>
             </div>
             <Button
@@ -269,7 +308,7 @@ function PreviewPage() {
               </Card>
             );
           })}
-          {!isLoading && questions.length === 0 ? (
+          {!questionsError && questions.length === 0 ? (
             <Card className="rounded-xl border-dashed border-border p-10 text-center text-[13px] text-muted-foreground">
               This assessment has no questions yet. Open the randomizer to generate and attach a test.
             </Card>

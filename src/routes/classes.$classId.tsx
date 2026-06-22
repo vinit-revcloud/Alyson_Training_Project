@@ -2,7 +2,9 @@ import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { z } from "zod";
 import { AdminLayout } from "@/components/admin/AdminLayout";
+import { QueryLoadError } from "@/components/admin/QueryLoadError";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,7 +55,10 @@ import {
   Rocket,
 } from "lucide-react";
 
+const classParamsSchema = z.object({ classId: z.string().uuid() });
+
 export const Route = createFileRoute("/classes/$classId")({
+  params: classParamsSchema,
   component: ClassEditor,
   notFoundComponent: () => (
     <AdminLayout title="Class not found">
@@ -66,18 +71,19 @@ function ClassEditor() {
   const { classId } = Route.useParams();
   const qc = useQueryClient();
 
-  const { data: cls, isLoading } = useQuery({
+  const { data: cls, isLoading, isError, refetch } = useQuery({
     queryKey: ["class", classId],
     queryFn: () => getClass(classId),
   });
-  const { data: course } = useQuery({
+  const { data: course, isError: courseError } = useQuery({
     queryKey: ["course", cls?.course_id],
     queryFn: () => (cls?.course_id ? getCourse(cls.course_id) : Promise.resolve(null)),
     enabled: !!cls?.course_id,
   });
-  const { data: sections = [], refetch: refetchSections } = useQuery({
+  const { data: sections = [], refetch: refetchSections, isError: sectionsError } = useQuery({
     queryKey: ["class-sections", classId],
     queryFn: () => listSectionsWithAssets(classId),
+    enabled: !!cls,
   });
   const { data: assessment } = useQuery({
     queryKey: ["class-assessment", classId],
@@ -88,8 +94,6 @@ function ClassEditor() {
     queryFn: () => getAssessmentAttemptSummary(assessment!.id),
     enabled: !!assessment?.id,
   });
-
-  if (!isLoading && !cls) throw notFound();
 
   // Local editable meta
   const [name, setName] = useState("");
@@ -139,10 +143,31 @@ function ClassEditor() {
     onSuccess: () => refetchSections(),
   });
 
+  if (isLoading) {
+    return (
+      <AdminLayout title="Class" subtitle="Loading class editor…">
+        <Card className="h-40 animate-pulse rounded-xl border-border bg-muted/30" />
+      </AdminLayout>
+    );
+  }
+
+  if (isError) {
+    return (
+      <AdminLayout title="Class">
+        <QueryLoadError message="Could not load this class" onRetry={() => void refetch()} />
+        <Link to="/courses" className="mt-4 inline-block text-sm text-primary hover:underline">
+          ← Back to courses
+        </Link>
+      </AdminLayout>
+    );
+  }
+
+  if (!cls) throw notFound();
+
   return (
     <AdminLayout
-      title={cls?.name ?? "Class"}
-      subtitle={course ? `${course.title} · ${cls?.level ?? ""}` : ""}
+      title={cls.name}
+      subtitle={course ? `${course.title} · ${cls.level}` : cls.level}
       actions={
         <div className="flex items-center gap-2">
           <StatusBadge status={cls?.status ?? "draft"} />
@@ -204,8 +229,15 @@ function ClassEditor() {
             </Link>
           ) : null}
           <ChevronRight className="h-3 w-3" />
-          <span className="text-foreground">{cls?.name}</span>
+          <span className="text-foreground">{cls.name}</span>
         </div>
+
+        {sectionsError || courseError ? (
+          <QueryLoadError
+            message="Some class data failed to load"
+            onRetry={() => void refetchSections()}
+          />
+        ) : null}
 
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
           {/* Sections column */}

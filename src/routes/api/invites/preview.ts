@@ -12,7 +12,9 @@ export const Route = createFileRoute("/api/invites/preview")({
           return Response.json({ valid: false, reason: "not_found" }, { status: 400 });
         }
         const preview = await previewInviteToken(token, email || undefined);
-        return Response.json(preview);
+        return Response.json(preview, {
+          headers: { "Cache-Control": "private, max-age=60" },
+        });
       },
     },
   },

@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { requireDbAuth } from "@/integrations/neon/auth-middleware";
 import { signAssetUrl } from "@/lib/asset-signing.server";
+import { assertAssetReadAccess } from "@/lib/asset-ownership.server";
 import type { AssetBucket } from "@/lib/asset-storage.shared";
 
 const AssetUrlInput = z.object({
@@ -14,7 +15,8 @@ const AssetUrlInput = z.object({
 export const getSignedAssetUrlFn = createServerFn({ method: "POST" })
   .middleware([requireDbAuth])
   .inputValidator((data: unknown) => AssetUrlInput.parse(data))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    await assertAssetReadAccess(context.userId, data.bucket as AssetBucket, data.storagePath);
     const url = signAssetUrl(
       data.bucket as AssetBucket,
       data.storagePath,

@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { AdminLayout } from "@/components/admin/AdminLayout";
+import { QueryLoadError } from "@/components/admin/QueryLoadError";
 import { MetricCard } from "@/components/admin/MetricCard";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +31,7 @@ import {
   processEmailQueueFn,
 } from "@/lib/email/email-settings.functions";
 import { cn } from "@/lib/utils";
+import { NOTIFICATIONS_QUERY_OPTS } from "@/lib/query-options";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
@@ -67,17 +69,17 @@ function NotificationsPage() {
   const emails = useQuery({
     queryKey: ["email-notifications"],
     queryFn: fetchEmailMetrics,
-    refetchInterval: 30_000,
+    ...NOTIFICATIONS_QUERY_OPTS,
   });
   const health = useQuery({
     queryKey: ["email-health"],
     queryFn: () => loadHealth(),
-    refetchInterval: 60_000,
+    ...NOTIFICATIONS_QUERY_OPTS,
   });
   const assignments = useQuery({
     queryKey: ["assignment-metrics-notifications"],
     queryFn: getAssignmentMetrics,
-    refetchInterval: 60 * 60_000,
+    ...NOTIFICATIONS_QUERY_OPTS,
   });
 
   const processMut = useMutation({
@@ -97,7 +99,7 @@ function NotificationsPage() {
   return (
     <AdminLayout
       title="Notifications & Email Activity"
-      subtitle="Enqueue-only workflow — metrics from notification_log & email_send_log · refreshes every 30s"
+      subtitle="Enqueue-only workflow — metrics from notification_log & email_send_log · refreshes every 5 min"
       actions={
         <div className="flex gap-2">
           <Link
@@ -125,6 +127,16 @@ function NotificationsPage() {
       }
     >
       <div className="space-y-6">
+        {emails.isError || health.isError || assignments.isError ? (
+          <QueryLoadError
+            message="Some notification metrics failed to load"
+            onRetry={() => {
+              void emails.refetch();
+              void health.refetch();
+              void assignments.refetch();
+            }}
+          />
+        ) : null}
         {h ? (
           <section className="grid grid-cols-2 gap-3 md:grid-cols-3">
             <Card className="rounded-xl border-border bg-card p-4">

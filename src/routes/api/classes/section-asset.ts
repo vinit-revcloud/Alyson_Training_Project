@@ -6,13 +6,16 @@ import { userFromRequest } from "@/lib/auth-token.server";
 
 const BodySchema = z.object({
   sectionId: z.string().uuid(),
-  kind: z.string(),
-  storageBucket: z.string().nullable().optional(),
-  storagePath: z.string().nullable().optional(),
-  externalUrl: z.string().nullable().optional(),
-  fileName: z.string(),
-  mimeType: z.string().nullable().optional(),
-  sizeBytes: z.number().int().nullable().optional(),
+  kind: z.enum(["video", "document", "transcript"]),
+  storageBucket: z
+    .enum(["class-videos", "class-documents", "class-transcripts"])
+    .nullable()
+    .optional(),
+  storagePath: z.string().max(500).nullable().optional(),
+  externalUrl: z.string().max(2000).nullable().optional(),
+  fileName: z.string().min(1).max(255),
+  mimeType: z.string().max(120).nullable().optional(),
+  sizeBytes: z.number().int().nonnegative().nullable().optional(),
 });
 
 export const Route = createFileRoute("/api/classes/section-asset")({
@@ -26,8 +29,15 @@ export const Route = createFileRoute("/api/classes/section-asset")({
           const id = await insertSectionAssetInDb(body);
           return Response.json({ id });
         } catch (err) {
+          if (err instanceof z.ZodError) {
+            return Response.json({ error: "Invalid request body" }, { status: 400 });
+          }
           const message = err instanceof Error ? err.message : "Insert asset failed";
-          const status = message.includes("Unauthorized") ? 401 : 500;
+          const status = message.includes("Unauthorized")
+            ? 401
+            : message.includes("Not authorized")
+              ? 403
+              : 500;
           return Response.json({ error: message }, { status });
         }
       },

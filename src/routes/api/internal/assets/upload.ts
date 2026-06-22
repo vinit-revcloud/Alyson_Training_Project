@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { uploadAssetFile } from "@/lib/asset-storage.server";
 import type { AssetBucket } from "@/lib/asset-storage.shared";
 import { assertUploadSize } from "@/lib/asset-upload-limits";
-import { assertSectionExistsForUpload } from "@/lib/asset-ownership.server";
+import { assertSectionExistsForUpload, assertInterviewPaperUploadPath } from "@/lib/asset-ownership.server";
 import { userFromAssetRequest } from "@/lib/asset-auth.server";
 
 const BUCKETS = new Set<string>(["class-videos", "class-documents", "class-transcripts", "interview-papers"]);
@@ -23,7 +23,11 @@ export const Route = createFileRoute("/api/internal/assets/upload")({
           }
 
           assertUploadSize(bucket as AssetBucket, file.size);
-          await assertSectionExistsForUpload(storagePath);
+          if (bucket === "interview-papers") {
+            await assertInterviewPaperUploadPath(storagePath);
+          } else {
+            await assertSectionExistsForUpload(storagePath);
+          }
 
           const buffer = Buffer.from(await file.arrayBuffer());
           await uploadAssetFile(bucket as AssetBucket, storagePath, buffer);

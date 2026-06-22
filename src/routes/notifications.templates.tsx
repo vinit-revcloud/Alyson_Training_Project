@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState, useMemo, useEffect } from "react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
+import { QueryLoadError } from "@/components/admin/QueryLoadError";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,6 +43,14 @@ function TemplatesPage() {
       }
     >
       <div className="grid gap-4 lg:grid-cols-[260px_1fr]">
+        {q.isError ? (
+          <div className="lg:col-span-2">
+            <QueryLoadError
+              message="Could not load email templates"
+              onRetry={() => void q.refetch()}
+            />
+          </div>
+        ) : null}
         <Card className="rounded-xl border-border bg-card p-3 shadow-soft">
           <div className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
             Templates
@@ -87,7 +96,7 @@ function TemplatesPage() {
             <EmailTemplateEditor template={selected} />
           ) : (
             <Card className="rounded-xl border-border bg-card p-10 text-center text-sm text-muted-foreground shadow-soft">
-              {q.isLoading ? "Loading…" : "Select a template on the left."}
+              {q.isLoading ? "Loading…" : q.isError ? "Templates unavailable." : "Select a template on the left."}
             </Card>
           )}
         </div>

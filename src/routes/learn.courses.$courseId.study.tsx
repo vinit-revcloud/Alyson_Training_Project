@@ -1,14 +1,19 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { QueryLoadError } from "@/components/admin/QueryLoadError";
 import { getCourseStudyCards, recordStudyActivity, type StudyCard } from "@/lib/learn-api";
 import { useSession } from "@/lib/auth";
 import { ArrowLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 
+const studyParamsSchema = z.object({ courseId: z.string().uuid() });
+
 export const Route = createFileRoute("/learn/courses/$courseId/study")({
+  params: studyParamsSchema,
   component: StudyFlow,
 });
 
@@ -17,7 +22,7 @@ function StudyFlow() {
   const { user } = useSession();
   const [index, setIndex] = useState(0);
 
-  const { data: cards = [], isLoading } = useQuery({
+  const { data: cards = [], isLoading, isError, error, refetch } = useQuery({
     queryKey: ["study-cards", courseId],
     queryFn: () => getCourseStudyCards(courseId),
   });
@@ -52,6 +57,28 @@ function StudyFlow() {
     return (
       <div className="flex min-h-[60dvh] items-center justify-center text-sm text-muted-foreground">
         Loading cards…
+      </div>
+    );
+  }
+
+  if (isError) {
+    const msg = error instanceof Error ? error.message : "";
+    const denied = msg.includes("do not have access");
+    return (
+      <div className="mx-auto max-w-lg p-6 text-center">
+        {denied ? (
+          <>
+            <p className="text-sm font-medium">Course not available</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              This course is not assigned to you. Return to your course list.
+            </p>
+            <Button asChild variant="link" className="mt-2">
+              <Link to="/learn/courses">Back to courses</Link>
+            </Button>
+          </>
+        ) : (
+          <QueryLoadError message="Could not load study cards" onRetry={() => void refetch()} />
+        )}
       </div>
     );
   }

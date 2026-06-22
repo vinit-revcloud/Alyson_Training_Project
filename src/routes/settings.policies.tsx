@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
+import { QueryLoadError } from "@/components/admin/QueryLoadError";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +20,7 @@ import { toast } from "sonner";
 import { FileUp, Plus } from "lucide-react";
 
 export const Route = createFileRoute("/settings/policies")({
+  head: () => ({ meta: [{ title: "HR Policies — Alyson" }] }),
   component: PoliciesAdminPage,
 });
 
@@ -28,7 +30,7 @@ function PoliciesAdminPage() {
   const uploadFn = useServerFn(uploadPolicyPdfFn);
   const publishFn = useServerFn(publishPolicyFn);
 
-  const { data: policies = [], refetch, isLoading } = useQuery({
+  const { data: policies = [], refetch, isLoading, isError } = useQuery({
     queryKey: ["admin-policies"],
     queryFn: () => listFn(),
   });
@@ -102,6 +104,9 @@ function PoliciesAdminPage() {
       }
     >
       <div className="space-y-5">
+        {isError ? (
+          <QueryLoadError message="Could not load policies" onRetry={() => void refetch()} />
+        ) : null}
         <div className="flex justify-end">
           <Button
             className="gap-2"
@@ -163,6 +168,10 @@ function PoliciesAdminPage() {
 
         {isLoading ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : isError ? null : policies.length === 0 ? (
+          <Card className="p-8 text-center text-sm text-muted-foreground">
+            No policies yet. Create one to publish handbook content for learners.
+          </Card>
         ) : (
           policies.map((p) => (
             <Card key={p.id} className="space-y-3 p-5">

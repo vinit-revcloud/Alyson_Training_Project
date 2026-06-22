@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireContentManager, requireDbAuth } from "@/integrations/neon/auth-middleware";
+import { requireDbAuth, requireHiringRead } from "@/integrations/neon/auth-middleware";
 import { requireAdminUserId } from "@/lib/auth-token.server";
 import {
   getEmailWorkspaceSettings,
@@ -58,9 +58,9 @@ export const processEmailQueueFn = createServerFn({ method: "POST" })
     return processEmailQueueNow();
   });
 
-/** Delivery stats for platform Analytics (trainers + admins). */
+/** Delivery stats for platform Analytics (trainers, hiring managers, admins, CEO). */
 export const fetchEmailDeliverySummaryFn = createServerFn({ method: "GET" })
-  .middleware([requireContentManager])
+  .middleware([requireHiringRead])
   .handler(async () => {
     const [metrics, health] = await Promise.all([
       fetchEmailMetricsFromDb(),

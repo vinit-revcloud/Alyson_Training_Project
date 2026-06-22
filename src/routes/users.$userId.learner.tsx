@@ -1,14 +1,22 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
+import { z } from "zod";
 import { AdminLayout } from "@/components/admin/AdminLayout";
+import { QueryLoadError } from "@/components/admin/QueryLoadError";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { getLearner360Fn } from "@/lib/learner-360.functions";
 import { ArrowLeft, ExternalLink } from "lucide-react";
 
+const userIdSchema = z.object({ userId: z.string().uuid() });
+
 export const Route = createFileRoute("/users/$userId/learner")({
+  params: userIdSchema,
+  head: ({ params }) => ({
+    meta: [{ title: `Learner 360 — ${params.userId.slice(0, 8)}…` }],
+  }),
   component: Learner360Page,
 });
 
@@ -16,15 +24,41 @@ function Learner360Page() {
   const { userId } = Route.useParams();
   const load = useServerFn(getLearner360Fn);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["learner-360", userId],
     queryFn: () => load({ data: { userId } }),
+    retry: (count, err) => {
+      const msg = err instanceof Error ? err.message : "";
+      if (msg.includes("Not authorized") || msg.includes("admin")) return false;
+      return count < 2;
+    },
   });
 
   if (isLoading) {
     return (
       <AdminLayout title="Learner 360">
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <p className="text-sm text-muted-foreground">Loading learner profile…</p>
+      </AdminLayout>
+    );
+  }
+
+  if (isError) {
+    const forbidden =
+      error instanceof Error &&
+      (error.message.includes("Not authorized") || error.message.includes("admin"));
+    return (
+      <AdminLayout title="Learner 360">
+        <QueryLoadError
+          message={
+            forbidden
+              ? "You don't have permission to view this profile"
+              : "Could not load learner profile"
+          }
+          onRetry={forbidden ? undefined : () => void refetch()}
+        />
+        <Link to="/users" className="mt-4 inline-block text-sm text-primary hover:underline">
+          ← Back to users
+        </Link>
       </AdminLayout>
     );
   }
@@ -33,6 +67,9 @@ function Learner360Page() {
     return (
       <AdminLayout title="Learner 360">
         <p className="text-sm text-muted-foreground">User not found.</p>
+        <Link to="/users" className="mt-4 inline-block text-sm text-primary hover:underline">
+          ← Back to users
+        </Link>
       </AdminLayout>
     );
   }

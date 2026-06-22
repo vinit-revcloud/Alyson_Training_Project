@@ -3,7 +3,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
+import { QueryLoadError } from "@/components/admin/QueryLoadError";
 import { PipelineBoard } from "@/components/hiring/PipelineBoard";
+import { HiringWorkflowStrip } from "@/components/hiring/HiringWorkflowStrip";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -39,7 +41,7 @@ function PipelineBoardPage() {
   const create = useServerFn(createPipelineFn);
   const qc = useQueryClient();
 
-  const { data: pipelines = [], isLoading } = useQuery({
+  const { data: pipelines = [], isLoading, isError, refetch } = useQuery({
     queryKey: ["hiring-pipelines"],
     queryFn: () => load(),
   });
@@ -143,8 +145,11 @@ function PipelineBoardPage() {
         </Dialog>
       }
     >
+      <HiringWorkflowStrip className="mb-5" />
       {isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <p className="text-sm text-muted-foreground">Loading pipeline…</p>
+      ) : isError ? (
+        <QueryLoadError message="Could not load hiring pipeline" onRetry={() => void refetch()} />
       ) : (
         <PipelineBoard pipelines={pipelines} />
       )}

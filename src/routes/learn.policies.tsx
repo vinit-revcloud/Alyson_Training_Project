@@ -8,23 +8,32 @@ import { Badge } from "@/components/ui/badge";
 import { acknowledgePolicyFn, listPoliciesFn } from "@/lib/onboarding/onboarding.functions";
 import { getSignedAssetUrlFn } from "@/lib/asset.functions";
 import type { AssetBucket } from "@/lib/asset-storage.shared";
+import { QueryLoadError } from "@/components/admin/QueryLoadError";
 import { toast } from "sonner";
 
 function PolicyPdfLink({ bucket, storagePath }: { bucket: string; storagePath: string }) {
   const signFn = useServerFn(getSignedAssetUrlFn);
   const [url, setUrl] = useState<string | null>(null);
+  const [signError, setSignError] = useState(false);
 
   useEffect(() => {
+    setSignError(false);
+    setUrl(null);
     void signFn({
       data: {
         bucket: bucket as AssetBucket,
         storagePath,
         expiresIn: 3600,
       },
-    }).then((r) => setUrl(r.url));
+    })
+      .then((r) => setUrl(r.url))
+      .catch(() => setSignError(true));
   }, [bucket, storagePath, signFn]);
 
-  if (!url) return null;
+  if (signError) {
+    return <p className="text-sm text-muted-foreground">PDF link unavailable — contact HR.</p>;
+  }
+  if (!url) return <p className="text-sm text-muted-foreground">Loading PDF link…</p>;
   return (
     <a
       href={url}
@@ -45,7 +54,7 @@ function PoliciesPage() {
   const load = useServerFn(listPoliciesFn);
   const ack = useServerFn(acknowledgePolicyFn);
 
-  const { data: policies, isLoading, refetch } = useQuery({
+  const { data: policies, isLoading, isError, refetch } = useQuery({
     queryKey: ["learner-policies"],
     queryFn: () => load(),
   });
@@ -61,6 +70,14 @@ function PoliciesPage() {
 
   if (isLoading) {
     return <p className="p-6 text-sm text-muted-foreground">Loading policies…</p>;
+  }
+
+  if (isError) {
+    return (
+      <div className="m-6">
+        <QueryLoadError message="Could not load policies" onRetry={() => void refetch()} />
+      </div>
+    );
   }
 
   if (!policies?.length) {

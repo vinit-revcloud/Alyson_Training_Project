@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { AdminLayout } from "@/components/admin/AdminLayout";
+import { QueryLoadError } from "@/components/admin/QueryLoadError";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MetricCard } from "@/components/admin/MetricCard";
@@ -11,6 +12,7 @@ import { fetchDashboardMetrics } from "@/lib/dashboard-metrics";
 import { fetchDashboardSummary } from "@/lib/dashboard-summary-api";
 import { getAssignmentMetrics } from "@/lib/test-assignments-api";
 import { fetchEmailDeliverySummaryFn } from "@/lib/email/email-settings.functions";
+import { ANALYTICS_QUERY_OPTS } from "@/lib/query-options";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -72,27 +74,45 @@ function AnalyticsPage() {
   const loadEmailSummary = useServerFn(fetchEmailDeliverySummaryFn);
   const [department, setDepartment] = useState<Department>("All");
 
-  const { data: metrics, isLoading: metricsLoading } = useQuery({
+  const {
+    data: metrics,
+    isLoading: metricsLoading,
+    isError: metricsError,
+    refetch: refetchMetrics,
+  } = useQuery({
     queryKey: ["dashboard-metrics"],
     queryFn: fetchDashboardMetrics,
-    refetchInterval: 60_000,
-    refetchOnWindowFocus: true,
+    ...ANALYTICS_QUERY_OPTS,
   });
-  const { data: summary } = useQuery({
+  const {
+    data: summary,
+    isError: summaryError,
+    refetch: refetchSummary,
+  } = useQuery({
     queryKey: ["dashboard-summary"],
     queryFn: fetchDashboardSummary,
-    refetchInterval: 60_000,
+    ...ANALYTICS_QUERY_OPTS,
   });
-  const { data: assignments } = useQuery({
+  const {
+    data: assignments,
+    isError: assignmentsError,
+    refetch: refetchAssignments,
+  } = useQuery({
     queryKey: ["assignment-metrics"],
     queryFn: getAssignmentMetrics,
-    refetchInterval: 60_000,
+    ...ANALYTICS_QUERY_OPTS,
   });
-  const { data: emailStats } = useQuery({
+  const {
+    data: emailStats,
+    isError: emailError,
+    refetch: refetchEmail,
+  } = useQuery({
     queryKey: ["email-delivery-summary-analytics"],
     queryFn: () => loadEmailSummary(),
-    refetchInterval: 60_000,
+    ...ANALYTICS_QUERY_OPTS,
   });
+
+  const loadFailed = metricsError || summaryError || assignmentsError || emailError;
 
   const filterDept = (dept: string) => department === "All" || dept === department;
 
@@ -145,6 +165,17 @@ function AnalyticsPage() {
       }
     >
       <div className="space-y-6">
+        {loadFailed ? (
+          <QueryLoadError
+            message="Some analytics data failed to load"
+            onRetry={() => {
+              void refetchMetrics();
+              void refetchSummary();
+              void refetchAssignments();
+              void refetchEmail();
+            }}
+          />
+        ) : null}
         {/* Platform overview */}
         <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
           <MetricCard

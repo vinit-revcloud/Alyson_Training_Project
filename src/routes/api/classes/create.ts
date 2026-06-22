@@ -15,8 +15,8 @@ const SectionInputSchema = z.object({
 });
 
 const CreateClassBodySchema = z.object({
-  name: z.string().min(1),
-  parentCourse: z.string().min(1),
+  name: z.string().min(1).max(200),
+  parentCourse: z.string().uuid(),
   level: LevelSchema,
   audience: z.string(),
   summary: z.string(),
@@ -37,6 +37,9 @@ export const Route = createFileRoute("/api/classes/create")({
           const result = await createClassRecordsInDb(body, authUser.id);
           return Response.json(result);
         } catch (err) {
+          if (err instanceof z.ZodError) {
+            return Response.json({ error: "Invalid request body" }, { status: 400 });
+          }
           const message = err instanceof Error ? err.message : "Create class failed";
           const status = message.includes("Unauthorized")
             ? 401

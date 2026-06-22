@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { QueryLoadError } from "@/components/admin/QueryLoadError";
 import { listMyAssignments } from "@/lib/learn-api";
 import { useSession } from "@/lib/auth";
 import { Clock, PlayCircle } from "lucide-react";
@@ -13,7 +14,7 @@ export const Route = createFileRoute("/learn/assignments")({
 
 function LearnAssignmentsPage() {
   const { user } = useSession();
-  const { data: assignments = [], isLoading } = useQuery({
+  const { data: assignments = [], isLoading, isError, refetch } = useQuery({
     queryKey: ["my-assignments", user?.id],
     queryFn: () => listMyAssignments(user!.id),
     enabled: !!user?.id,
@@ -22,7 +23,9 @@ function LearnAssignmentsPage() {
   return (
     <div className="mx-auto max-w-2xl flex-1 space-y-4 p-6">
       <h1 className="text-xl font-semibold tracking-tight">Assessments</h1>
-      {isLoading ? (
+      {isError ? (
+        <QueryLoadError message="Could not load your assessments" onRetry={() => void refetch()} />
+      ) : isLoading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : assignments.length === 0 ? (
         <Card className="p-6 text-center text-sm text-muted-foreground">

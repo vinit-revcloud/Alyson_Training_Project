@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireContentManager } from "@/integrations/neon/auth-middleware";
+import { requireContentManager, requireHiringRead } from "@/integrations/neon/auth-middleware";
 import {
   assignAssessmentInDb,
   autoAssignCourseToDepartmentInDb,
@@ -48,7 +48,7 @@ export const listAssignmentsFn = createServerFn({ method: "GET" })
   .handler(async () => listAssignmentDetailsFromDb());
 
 export const getAssignmentMetricsFn = createServerFn({ method: "GET" })
-  .middleware([requireContentManager])
+  .middleware([requireHiringRead])
   .handler(async () => getAssignmentMetricsFromDb());
 
 export const createManualAssignmentFn = createServerFn({ method: "POST" })

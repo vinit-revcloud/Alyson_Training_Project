@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AdminLayout } from "@/components/admin/AdminLayout";
+import { QueryLoadError } from "@/components/admin/QueryLoadError";
 import { TrainingWorkflowStrip } from "@/components/training/TrainingWorkflowStrip";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -46,6 +47,12 @@ import {
 
 export const Route = createFileRoute("/assignments")({
   head: () => ({ meta: [{ title: "Assignments — Alyson" }] }),
+  validateSearch: (search: Record<string, unknown>) => ({
+    department:
+      typeof search.department === "string" && search.department.trim()
+        ? search.department.trim()
+        : undefined,
+  }),
   component: AssignmentsPage,
 });
 
@@ -72,18 +79,32 @@ function daysUntil(iso: string) {
 
 function AssignmentsPage() {
   const qc = useQueryClient();
+  const { department: deptFilter } = Route.useSearch();
   const [openManual, setOpenManual] = useState(false);
   const [openAuto, setOpenAuto] = useState(false);
 
-  const { data: assignments = [], isLoading } = useQuery({
+  const {
+    data: assignments = [],
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ["assignments"],
     queryFn: listAssignments,
   });
-  const { data: metrics } = useQuery({
+  const {
+    data: metrics,
+    isError: metricsError,
+    refetch: refetchMetrics,
+  } = useQuery({
     queryKey: ["assignment-metrics"],
     queryFn: getAssignmentMetrics,
   });
 
+  const filtered = useMemo(() => {
+    if (!deptFilter) return assignments;
+    return assignments.filter((a) => a.learner.department === deptFilter);
+  }, [assignments, deptFilter]);
 
   const grouped = useMemo(() => {
     const byStatus: Record<string, AssignmentDetail[]> = {
@@ -93,14 +114,20 @@ function AssignmentsPage() {
       failed_capped: [],
       expired: [],
     };
-    for (const a of assignments) byStatus[a.status]?.push(a);
+    for (const a of filtered) byStatus[a.status]?.push(a);
     return byStatus;
-  }, [assignments]);
+  }, [filtered]);
+
+  const loadFailed = isError || metricsError;
 
   return (
     <AdminLayout
       title="Test Assignments"
-      subtitle="Assign training tests to employees — external candidates use Interviews instead"
+      subtitle={
+        deptFilter
+          ? `Showing learners in ${deptFilter} — external candidates use Interviews instead`
+          : "Assign training tests to employees — external candidates use Interviews instead"
+      }
       actions={
         <div className="flex gap-2">
           <Dialog open={openAuto} onOpenChange={setOpenAuto}>
@@ -124,6 +151,23 @@ function AssignmentsPage() {
     >
       <TrainingWorkflowStrip className="mb-1" />
       <div className="space-y-5">
+        {loadFailed ? (
+          <QueryLoadError
+            message="Could not load assignment data"
+            onRetry={() => {
+              void refetch();
+              void refetchMetrics();
+            }}
+          />
+        ) : null}
+        {deptFilter ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Badge variant="outline">Department: {deptFilter}</Badge>
+            <Link to="/assignments" className="text-primary hover:underline">
+              Clear filter
+            </Link>
+          </div>
+        ) : null}
         <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
           <MetricCard
             label="Total assigned"
@@ -162,7 +206,9 @@ function AssignmentsPage() {
             <div>
               <div className="text-[14px] font-semibold text-[#0F172A]">All assignments</div>
               <div className="text-[12px] text-[#6B7280]">
-                {isLoading ? "Loading…" : `${assignments.length} entries · live updating`}
+                {isLoading
+                  ? "Loading…"
+                  : `${filtered.length}${deptFilter ? ` in ${deptFilter}` : ""} · ${assignments.length} total`}
               </div>
             </div>
           </div>
@@ -181,7 +227,20 @@ function AssignmentsPage() {
                 </tr>
               </thead>
               <tbody>
-                {assignments.map((a) => {
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-12 text-center text-[12.5px] text-[#6B7280]">
+                      Loading assignments…
+                    </td>
+                  </tr>
+                ) : isError ? (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-12 text-center text-[12.5px] text-[#6B7280]">
+                      Assignment list unavailable — use Retry above.
+                    </td>
+                  </tr>
+                ) : (
+                filtered.map((a) => {
                   const days = daysUntil(a.due_at);
                   return (
                     <tr key={a.id} className="border-t border-[#E5E7EB]">
@@ -233,14 +292,17 @@ function AssignmentsPage() {
                       </td>
                     </tr>
                   );
-                })}
-                {assignments.length === 0 && !isLoading ? (
+                })
+                )}
+                {!isLoading && !isError && filtered.length === 0 ? (
                   <tr>
                     <td
                       colSpan={8}
                       className="px-4 py-12 text-center text-[12.5px] text-[#6B7280]"
                     >
-                      No assignments yet. Use “Assign test” or “Auto-assign by dept” above.
+                      {deptFilter
+                        ? `No assignments for ${deptFilter}.`
+                        : "No assignments yet. Use “Assign test” or “Auto-assign by dept” above."}
                     </td>
                   </tr>
                 ) : null}

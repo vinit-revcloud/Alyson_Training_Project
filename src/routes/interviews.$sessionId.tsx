@@ -2,7 +2,9 @@ import { createFileRoute, Link, notFound, useNavigate } from "@tanstack/react-ro
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
+import { z } from "zod";
 import { AdminLayout } from "@/components/admin/AdminLayout";
+import { QueryLoadError } from "@/components/admin/QueryLoadError";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -51,6 +53,13 @@ import {
 } from "@/components/interview/InterviewExtendedPanels";
 import { cn } from "@/lib/utils";
 import { InterviewGuide } from "@/components/hiring/InterviewGuide";
+import { useSession } from "@/lib/auth";
+import { isExecutiveReadOnly } from "@/lib/role-access";
+import {
+  INTERVIEW_POLL_OPTS,
+  INTERVIEW_SESSION_EVAL_POLL_MS,
+  INTERVIEW_SESSION_LIVE_POLL_MS,
+} from "@/lib/query-options";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -63,7 +72,10 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
+const sessionParamsSchema = z.object({ sessionId: z.string().uuid() });
+
 export const Route = createFileRoute("/interviews/$sessionId")({
+  params: sessionParamsSchema,
   head: () => ({ meta: [{ title: "Interview session — Alyson" }] }),
   component: InterviewSessionPage,
 });
@@ -86,6 +98,8 @@ function InterviewSessionPage() {
   const { sessionId } = Route.useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { roles } = useSession();
+  const readOnly = isExecutiveReadOnly(roles);
   const fetchDetail = useServerFn(getInterviewSessionDetailFn);
   const fetchSubmission = useServerFn(getInterviewSubmissionRecordFn);
 
@@ -94,6 +108,7 @@ function InterviewSessionPage() {
     isLoading,
     isError: sessionError,
     error: sessionErr,
+    refetch: refetchSession,
   } = useQuery({
     queryKey: ["interview-session", sessionId],
     queryFn: () => fetchDetail({ data: { sessionId } }),
@@ -102,11 +117,14 @@ function InterviewSessionPage() {
       if (!status || status === "evaluated" || status === "cancelled" || status === "expired") {
         return false;
       }
-      if (status === "submitted" || status === "evaluating") return 5000;
-      if (status === "waiting" || status === "opened" || status === "in_progress") return 3000;
+      if (status === "submitted" || status === "evaluating") return INTERVIEW_SESSION_EVAL_POLL_MS;
+      if (status === "waiting" || status === "opened" || status === "in_progress") {
+        return INTERVIEW_SESSION_LIVE_POLL_MS;
+      }
       return false;
     },
-    staleTime: 5_000,
+    staleTime: 10_000,
+    ...INTERVIEW_POLL_OPTS,
   });
 
   const hasRecord =
@@ -114,11 +132,12 @@ function InterviewSessionPage() {
     session.assessment_mode !== "paper_only" &&
     ["submitted", "evaluating", "evaluated"].includes(session.status);
 
-  const { data: submission, isLoading: submissionLoading } = useQuery({
+  const { data: submission, isLoading: submissionLoading, isError: submissionError } = useQuery({
     queryKey: ["interview-submission", sessionId],
     queryFn: () => fetchSubmission({ data: { sessionId } }),
     enabled: hasRecord,
-    refetchInterval: session?.status === "evaluated" ? false : 5000,
+    refetchInterval: session?.status === "evaluated" ? false : INTERVIEW_SESSION_EVAL_POLL_MS,
+    ...INTERVIEW_POLL_OPTS,
   });
 
   const [notes, setNotes] = useState("");
@@ -152,7 +171,7 @@ function InterviewSessionPage() {
   });
 
   useEffect(() => {
-    if (!session || profileGenAttempted.current) return;
+    if (readOnly || !session || profileGenAttempted.current) return;
     if (evaluation?.profile_dimensions?.length) return;
     if (!["submitted", "evaluating", "evaluated"].includes(session.status)) return;
     if (!evaluation) return;
@@ -320,14 +339,15 @@ function InterviewSessionPage() {
   if (sessionError) {
     return (
       <AdminLayout title="Interview">
-        <Card className="mx-auto max-w-lg rounded-xl p-6 text-center shadow-soft">
-          <p className="text-[13px] text-destructive">
-            {sessionErr instanceof Error ? sessionErr.message : "Failed to load session."}
-          </p>
-          <Button asChild className="mt-4" variant="outline">
-            <Link to="/interviews">Back to interviews</Link>
-          </Button>
-        </Card>
+        <QueryLoadError
+          message={
+            sessionErr instanceof Error ? sessionErr.message : "Failed to load interview session"
+          }
+          onRetry={() => void refetchSession()}
+        />
+        <Button asChild className="mt-4" variant="outline">
+          <Link to="/interviews">Back to interviews</Link>
+        </Button>
       </AdminLayout>
     );
   }
@@ -379,6 +399,16 @@ function InterviewSessionPage() {
 
       <InterviewGuide variant="session" className="mb-4" />
 
+      {readOnly ? (
+        <Card className="mb-4 rounded-xl border-border bg-muted/30 p-3 text-[12.5px] text-muted-foreground">
+          Read-only view — scheduling and proctor actions require hiring manager or trainer access.
+        </Card>
+      ) : null}
+
+      {submissionError ? (
+        <QueryLoadError message="Could not load submitted answers" />
+      ) : null}
+
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <Badge variant="outline">{session.status.replace("_", " ")}</Badge>
         {isPaperOnly ? (
@@ -419,6 +449,7 @@ function InterviewSessionPage() {
         submissionLoading={submissionLoading && hasRecord}
         onRunEvaluation={() => rerun.mutate()}
         rerunPending={rerun.isPending}
+        readOnly={readOnly}
       />
 
       {showProfileSection ? (
@@ -449,7 +480,7 @@ function InterviewSessionPage() {
         </Card>
       )}
 
-      {canOpen && (
+      {canOpen && !readOnly && (
         <Card className="mb-4 rounded-xl border-primary/30 bg-primary/5 p-4 shadow-soft">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -561,7 +592,7 @@ function InterviewSessionPage() {
               </p>
             )}
             <div className="mt-3 flex flex-col gap-2">
-              {!isPaperOnly && canOpen && (
+              {!readOnly && !isPaperOnly && canOpen && (
                 <Button
                   className="gap-2"
                   size="lg"
@@ -582,7 +613,7 @@ function InterviewSessionPage() {
                   Preview assessment blueprint
                 </Link>
               </Button>
-              {!isPaperOnly ? (
+              {!readOnly && !isPaperOnly ? (
                 <>
                   <Button
                     variant="outline"
@@ -620,7 +651,7 @@ function InterviewSessionPage() {
                   ) : null}
                 </>
               ) : null}
-              {!["submitted", "evaluating", "evaluated", "cancelled"].includes(session.status) && (
+              {!readOnly && !["submitted", "evaluating", "evaluated", "cancelled"].includes(session.status) && (
                 <Button
                   variant="outline"
                   className="gap-2 text-destructive"
@@ -631,6 +662,7 @@ function InterviewSessionPage() {
                   Cancel session
                 </Button>
               )}
+              {!readOnly ? (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button
@@ -666,6 +698,7 @@ function InterviewSessionPage() {
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
+              ) : null}
             </div>
           </Card>
 
@@ -862,6 +895,7 @@ function CandidatePerformanceBanner({
   submissionLoading,
   onRunEvaluation,
   rerunPending,
+  readOnly = false,
 }: {
   session: { status: string; candidate_name: string; final_recommendation: string | null };
   evaluation: AiEvaluation | null;
@@ -873,6 +907,7 @@ function CandidatePerformanceBanner({
   submissionLoading: boolean;
   onRunEvaluation: () => void;
   rerunPending: boolean;
+  readOnly?: boolean;
 }) {
   const terminal = ["submitted", "evaluating", "evaluated"].includes(session.status);
 
@@ -902,10 +937,12 @@ function CandidatePerformanceBanner({
               </p>
             </div>
           </div>
+          {!readOnly ? (
           <Button variant="outline" size="sm" className="gap-2" onClick={onRunEvaluation} disabled={rerunPending}>
             <RefreshCw className="h-3.5 w-3.5" />
             {rerunPending ? "Running…" : "Run evaluation"}
           </Button>
+          ) : null}
         </div>
       </Card>
     );

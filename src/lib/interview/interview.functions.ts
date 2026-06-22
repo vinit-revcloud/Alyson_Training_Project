@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireContentManager } from "@/integrations/neon/auth-middleware";
+import { requireContentManager, requireHiringRead } from "@/integrations/neon/auth-middleware";
 import {
   assertSessionStatus,
   loadSessionByToken,
@@ -138,15 +138,15 @@ export const createInterviewSessionFn = createServerFn({ method: "POST" })
   });
 
 export const listInterviewSessionsFn = createServerFn({ method: "GET" })
-  .middleware([requireContentManager])
+  .middleware([requireHiringRead])
   .handler(async () => listInterviewSessionsFromDb());
 
 export const listInterviewAssessmentsFn = createServerFn({ method: "GET" })
-  .middleware([requireContentManager])
+  .middleware([requireHiringRead])
   .handler(async () => listInterviewAssessmentsFromDb());
 
 export const getInterviewSessionDetailFn = createServerFn({ method: "POST" })
-  .middleware([requireContentManager])
+  .middleware([requireHiringRead])
   .inputValidator((d: unknown) => SessionIdInput.parse(d))
   .handler(async ({ data }) => {
     const session = await getInterviewSessionByIdFromDb(data.sessionId);
@@ -169,7 +169,7 @@ export const generateInterviewProfileFn = createServerFn({ method: "POST" })
   });
 
 export const getInterviewSubmissionRecordFn = createServerFn({ method: "POST" })
-  .middleware([requireContentManager])
+  .middleware([requireHiringRead])
   .inputValidator((d: unknown) => SessionIdInput.parse(d))
   .handler(async ({ data }) => {
     const session = await getInterviewSessionByIdFromDb(data.sessionId);
@@ -300,7 +300,7 @@ export const addInterviewSupportingScoreFn = createServerFn({ method: "POST" })
   });
 
 export const getInterviewAuditBundleFn = createServerFn({ method: "POST" })
-  .middleware([requireContentManager])
+  .middleware([requireHiringRead])
   .inputValidator((d: unknown) => SessionIdInput.parse(d))
   .handler(async ({ data }) => {
     const { listEvaluationRuns } = await import("./evaluation-audit.server");

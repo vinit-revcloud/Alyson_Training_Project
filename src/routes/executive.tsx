@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { AdminLayout } from "@/components/admin/AdminLayout";
+import { QueryLoadError } from "@/components/admin/QueryLoadError";
 import { Card } from "@/components/ui/card";
 import { MetricCard } from "@/components/admin/MetricCard";
 import { fetchExecutiveSummaryFn } from "@/lib/executive.functions";
@@ -14,7 +15,7 @@ export const Route = createFileRoute("/executive")({
 
 function ExecutivePage() {
   const load = useServerFn(fetchExecutiveSummaryFn);
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["executive-summary"],
     queryFn: () => load(),
   });
@@ -42,6 +43,8 @@ function ExecutivePage() {
     >
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading executive metrics…</p>
+      ) : isError ? (
+        <QueryLoadError message="Could not load executive summary" onRetry={() => void refetch()} />
       ) : (
         <div className="space-y-6">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

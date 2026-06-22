@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Mail } from "lucide-react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
+import { QueryLoadError } from "@/components/admin/QueryLoadError";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ScheduleCard } from "@/components/admin/ScheduleCard";
@@ -35,9 +36,16 @@ function SchedulesPage() {
         </div>
       }
     >
+      {q.isError ? (
+        <QueryLoadError message="Could not load schedules" onRetry={() => void q.refetch()} />
+      ) : null}
       {q.isLoading ? (
         <Card className="rounded-xl border-border bg-card p-10 text-center text-sm text-muted-foreground shadow-soft">
           Loading schedules…
+        </Card>
+      ) : q.isError ? null : schedules.length === 0 ? (
+        <Card className="rounded-xl border-border bg-card p-10 text-center text-sm text-muted-foreground shadow-soft">
+          No notification schedules configured. Run <code className="text-xs">npm run db:apply-email-seeds</code> on a fresh database.
         </Card>
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">

@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireContentManager, requireDbAuth } from "@/integrations/neon/auth-middleware";
+import { requireDbAuth } from "@/integrations/neon/auth-middleware";
+import { requireAdminUserId } from "@/lib/auth-token.server";
 import {
   listAdminPoliciesFromDb,
   publishPolicyInDb,
@@ -29,21 +30,26 @@ const UploadSchema = z.object({
 });
 
 export const listAdminPoliciesFn = createServerFn({ method: "GET" })
-  .middleware([requireDbAuth, requireContentManager])
-  .handler(async (): Promise<AdminPolicyRow[]> => listAdminPoliciesFromDb());
+  .middleware([requireDbAuth])
+  .handler(async (): Promise<AdminPolicyRow[]> => {
+    await requireAdminUserId();
+    return listAdminPoliciesFromDb();
+  });
 
 export const upsertPolicyFn = createServerFn({ method: "POST" })
-  .middleware([requireDbAuth, requireContentManager])
+  .middleware([requireDbAuth])
   .inputValidator((data: unknown) => UpsertSchema.parse(data))
   .handler(async ({ data }): Promise<{ id: string }> => {
+    await requireAdminUserId();
     const id = await upsertPolicyInDb(data);
     return { id };
   });
 
 export const uploadPolicyPdfFn = createServerFn({ method: "POST" })
-  .middleware([requireDbAuth, requireContentManager])
+  .middleware([requireDbAuth])
   .inputValidator((data: unknown) => UploadSchema.parse(data))
   .handler(async ({ data }) => {
+    await requireAdminUserId();
     const buf = Buffer.from(data.base64, "base64");
     return uploadPolicyPdfInDb({
       policyId: data.policyId,
@@ -53,9 +59,10 @@ export const uploadPolicyPdfFn = createServerFn({ method: "POST" })
   });
 
 export const publishPolicyFn = createServerFn({ method: "POST" })
-  .middleware([requireDbAuth, requireContentManager])
+  .middleware([requireDbAuth])
   .inputValidator((data: unknown) => PolicyIdSchema.parse(data))
   .handler(async ({ data }) => {
+    await requireAdminUserId();
     await publishPolicyInDb(data.policyId);
     return { ok: true };
   });

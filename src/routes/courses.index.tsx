@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AdminLayout } from "@/components/admin/AdminLayout";
+import { QueryLoadError } from "@/components/admin/QueryLoadError";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,14 +48,16 @@ function CoursesPage() {
   const navigate = useNavigate();
   const [bulkOpen, setBulkOpen] = useState(false);
 
-  const { data: courses = [], isLoading } = useQuery({
+  const { data: courses = [], isLoading, isError, refetch } = useQuery({
     queryKey: ["courses"],
     queryFn: listCourses,
   });
-  const { data: deptMap } = useQuery({
+  const { data: deptMap, isError: deptMapError, refetch: refetchDeptMap } = useQuery({
     queryKey: ["all-course-departments"],
     queryFn: getAllCourseDepartments,
   });
+
+  const loadFailed = isError || deptMapError;
 
   const filtered = useMemo(() => {
     const list = courses.filter((c) => {
@@ -99,6 +102,15 @@ function CoursesPage() {
       }
     >
       <div className="space-y-5">
+        {loadFailed ? (
+          <QueryLoadError
+            message="Could not load courses"
+            onRetry={() => {
+              void refetch();
+              void refetchDeptMap();
+            }}
+          />
+        ) : null}
         <Card className="rounded-xl border-border bg-card p-3 shadow-soft">
           <div className="flex flex-wrap items-center gap-2">
             <Input
@@ -154,12 +166,25 @@ function CoursesPage() {
           </div>
         </Card>
 
-        {!isLoading && filtered.length === 0 ? (
+        {isLoading ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {[1, 2, 3].map((i) => (
+              <Card
+                key={i}
+                className="h-72 animate-pulse rounded-xl border-border bg-muted/30 shadow-soft"
+              />
+            ))}
+          </div>
+        ) : !loadFailed && filtered.length === 0 ? (
           <Card className="rounded-xl border-dashed border-border bg-card p-12 text-center shadow-soft">
             <GraduationCap className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
-            <h3 className="text-[16px] font-semibold">No courses match</h3>
+            <h3 className="text-[16px] font-semibold">
+              {courses.length === 0 ? "No courses yet" : "No courses match"}
+            </h3>
             <p className="mt-1 text-[12.5px] text-muted-foreground">
-              Try clearing filters or create a new class.
+              {courses.length === 0
+                ? "Create your first class to get started."
+                : "Try clearing filters or create a new class."}
             </p>
             <Link to="/classes/new" className="mt-4 inline-block">
               <Button className="h-9 gap-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary-glow">
@@ -167,7 +192,7 @@ function CoursesPage() {
               </Button>
             </Link>
           </Card>
-        ) : (
+        ) : !loadFailed ? (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {filtered.map((c) => {
               const atRisk = c.classCount > 0 && c.completion > 0 && c.completion < 40;
@@ -273,7 +298,7 @@ function CoursesPage() {
               );
             })}
           </div>
-        )}
+        ) : null}
       </div>
       <BulkClassImportDialog open={bulkOpen} onOpenChange={setBulkOpen} />
     </AdminLayout>

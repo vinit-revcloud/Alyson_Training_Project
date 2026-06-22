@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireContentManager } from "@/integrations/neon/auth-middleware";
+import { requireDbAuth } from "@/integrations/neon/auth-middleware";
+import { requireAdminUserId } from "@/lib/auth-token.server";
 import { enqueueAssignmentEmailInDb } from "@/lib/email/enqueue-assignment-email.server";
 import {
   ASSIGNMENT_EMAIL_TYPES,
@@ -26,8 +27,9 @@ const EnqueueAssignmentEmailSchema = z.object({
 });
 
 export const enqueueAssignmentEmailFn = createServerFn({ method: "POST" })
-  .middleware([requireContentManager])
+  .middleware([requireDbAuth])
   .inputValidator((data: unknown) => EnqueueAssignmentEmailSchema.parse(data))
   .handler(async ({ data }): Promise<EnqueueAssignmentEmailResult> => {
+    await requireAdminUserId();
     return enqueueAssignmentEmailInDb(data);
   });

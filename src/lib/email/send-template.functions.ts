@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
-import { requireSupabaseAuth } from "@/integrations/neon/auth-middleware";
+import { requireDbAuth } from "@/integrations/neon/auth-middleware";
+import { requireAdminUserId } from "@/lib/auth-token.server";
 import { renderTemplate, type PlaceholderKey } from "./render";
 import { getUserEmail } from "@/lib/user-email";
 
@@ -85,21 +86,12 @@ async function loadAssignmentVars(
 }
 
 export const sendTemplatedEmail = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireDbAuth])
   .inputValidator((d: SendInput) => d)
   .handler(async ({ data, context }) => {
+    await requireAdminUserId();
     const { userId } = context;
     const { supabaseAdmin } = await import("@/integrations/neon/client.server");
-
-    // authorize
-    const { data: roles } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", userId);
-    const allowed = (roles ?? []).some(
-      (r: { role: string }) => r.role === "admin" || r.role === "trainer",
-    );
-    if (!allowed) throw new Error("Not authorized");
 
     // Load template
     const { data: tpl, error: te } = await supabaseAdmin

@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AdminLayout } from "@/components/admin/AdminLayout";
+import { QueryLoadError } from "@/components/admin/QueryLoadError";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -82,7 +83,7 @@ function InvitesPage() {
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  const { data: invites = [], isLoading } = useQuery({
+  const { data: invites = [], isLoading, isError, refetch } = useQuery({
     queryKey: ["invites"],
     queryFn: listInvites,
     enabled: isAdmin(roles),
@@ -275,6 +276,9 @@ function InvitesPage() {
       subtitle="Invite @cintara.ai teammates and assign their workspace role"
     >
       <div className="space-y-4">
+        {isError ? (
+          <QueryLoadError message="Could not load invites" onRetry={() => void refetch()} />
+        ) : null}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <SummaryCard label="Total" value={stats.total} />
           <SummaryCard label="Pending" value={stats.pending} tone="amber" />
@@ -494,9 +498,11 @@ function InvitesPage() {
                   <tr>
                     <td colSpan={8} className="px-5 py-10 text-center text-muted-foreground">
                       <Mail className="mx-auto mb-2 h-6 w-6" />
-                      {invites.length === 0
-                        ? "No invites yet. Send one above to get started."
-                        : "No invites match the current filters."}
+                      {isError
+                        ? "Invite list unavailable — use Retry above."
+                        : invites.length === 0
+                          ? "No invites yet. Send one above to get started."
+                          : "No invites match the current filters."}
                     </td>
                   </tr>
                 ) : (

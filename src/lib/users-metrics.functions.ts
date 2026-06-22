@@ -1,11 +1,13 @@
 import { createServerFn } from "@tanstack/react-start";
-import { requireContentManager } from "@/integrations/neon/auth-middleware";
+import { requireDbAuth } from "@/integrations/neon/auth-middleware";
+import { requireAdminUserId } from "@/lib/auth-token.server";
 import { getPgPool } from "@/lib/pg.server";
 import type { UserMetrics } from "@/lib/users-metrics-api";
 
 export const fetchUserMetricsMapFn = createServerFn({ method: "GET" })
-  .middleware([requireContentManager])
+  .middleware([requireDbAuth])
   .handler(async (): Promise<Record<string, UserMetrics>> => {
+    await requireAdminUserId();
     const pool = getPgPool();
     const [assignmentsRes, attemptsRes, candidatesRes] = await Promise.all([
       pool.query<{ learner_user_id: string; status: string; due_at: string | null }>(

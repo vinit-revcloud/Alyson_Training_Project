@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { AdminLayout } from "@/components/admin/AdminLayout";
+import { QueryLoadError } from "@/components/admin/QueryLoadError";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -103,7 +104,7 @@ function EmailTestingPage() {
   const loadAssignments = useServerFn(listAssignmentsFn);
   const enqueueEmail = useServerFn(enqueueAssignmentEmailFn);
 
-  const { data: assignments = [], isLoading: loadingAssignments } = useQuery({
+  const { data: assignments = [], isLoading: loadingAssignments, isError, refetch } = useQuery({
     queryKey: ["assignments", "list"],
     queryFn: () => loadAssignments(),
   });
@@ -150,6 +151,12 @@ function EmailTestingPage() {
       subtitle="Enqueue assignment workflow emails for AWS Step Functions — no in-app SES send"
     >
       <div className="space-y-6">
+        {isError ? (
+          <QueryLoadError
+            message="Could not load assignments for testing"
+            onRetry={() => void refetch()}
+          />
+        ) : null}
         <Card className="rounded-xl border-border bg-card p-5 shadow-soft">
           <h3 className="mb-4 text-sm font-semibold text-foreground">Enqueue test email</h3>
           <div className="grid gap-4 md:grid-cols-2">
@@ -161,11 +168,13 @@ function EmailTestingPage() {
                   setAssignmentId(v);
                   setLastResult(null);
                 }}
-                disabled={loadingAssignments}
+                disabled={loadingAssignments || isError}
               >
                 <SelectTrigger>
                   <SelectValue
-                    placeholder={loadingAssignments ? "Loading…" : "Select assignment"}
+                    placeholder={
+                      loadingAssignments ? "Loading…" : isError ? "Unavailable" : "Select assignment"
+                    }
                   />
                 </SelectTrigger>
                 <SelectContent>
@@ -232,7 +241,7 @@ function EmailTestingPage() {
 
           <Button
             className="mt-4"
-            disabled={!assignmentId || mutation.isPending}
+            disabled={!assignmentId || mutation.isPending || isError}
             onClick={() => mutation.mutate()}
           >
             {mutation.isPending ? (

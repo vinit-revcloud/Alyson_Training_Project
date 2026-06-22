@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { requireContentManager } from "@/integrations/neon/auth-middleware";
+import { requireHiringRead } from "@/integrations/neon/auth-middleware";
 import { fetchAiUsageSummary } from "@/lib/ai-usage.server";
 import { getPgPool } from "@/lib/pg.server";
 import { fetchHiringFunnelMetrics } from "@/lib/hiring/hiring-reports.server";
@@ -16,7 +16,7 @@ export interface ExecutiveSummary {
 }
 
 export const fetchExecutiveSummaryFn = createServerFn({ method: "GET" })
-  .middleware([requireContentManager])
+  .middleware([requireHiringRead])
   .handler(async (): Promise<ExecutiveSummary> => {
     const pool = getPgPool();
     const [usersRes, classesRes, assignRes, emailRes, ai, hiring] = await Promise.all([

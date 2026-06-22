@@ -16,6 +16,7 @@ import { MetricCard } from "@/components/admin/MetricCard";
 import { DEPARTMENTS } from "@/lib/departments";
 import { fetchDashboardMetrics } from "@/lib/dashboard-metrics";
 import { fetchDashboardSummary } from "@/lib/dashboard-summary-api";
+import { DASHBOARD_QUERY_OPTS } from "@/lib/query-options";
 import {
   Users,
   GraduationCap,
@@ -87,13 +88,12 @@ function Dashboard() {
   const { data } = useQuery({
     queryKey: ["dashboard-metrics"],
     queryFn: fetchDashboardMetrics,
-    refetchInterval: 60_000,
-    refetchOnWindowFocus: true,
+    ...DASHBOARD_QUERY_OPTS,
   });
   const { data: summary } = useQuery({
     queryKey: ["dashboard-summary"],
     queryFn: fetchDashboardSummary,
-    refetchInterval: 60_000,
+    ...DASHBOARD_QUERY_OPTS,
   });
 
   const totalUsers = summary?.totalUsers ?? 0;

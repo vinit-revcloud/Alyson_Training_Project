@@ -1,11 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
-import { requireContentManager } from "@/integrations/neon/auth-middleware";
+import { requireHiringRead } from "@/integrations/neon/auth-middleware";
 import { getAssignmentMetricsFromDb } from "@/lib/assignments.server";
 import { getPgPool } from "@/lib/pg.server";
 import type { DashboardSummary } from "@/lib/dashboard-summary-api";
 
 export const fetchDashboardSummaryFn = createServerFn({ method: "GET" })
-  .middleware([requireContentManager])
+  .middleware([requireHiringRead])
   .handler(async (): Promise<DashboardSummary> => {
     const pool = getPgPool();
     const [metrics, userCountRes, courseCountRes] = await Promise.all([

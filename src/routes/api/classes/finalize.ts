@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { z } from "zod";
 import { assertContentManager } from "@/lib/content-manager.server";
 import {
   FinalizeClassInputSchema,
@@ -17,6 +18,9 @@ export const Route = createFileRoute("/api/classes/finalize")({
           const result = await runFinalizeClassCreation(body);
           return Response.json(result);
         } catch (err) {
+          if (err instanceof z.ZodError) {
+            return Response.json({ error: "Invalid request body" }, { status: 400 });
+          }
           const message = err instanceof Error ? err.message : "Finalize class failed";
           const status = message.includes("Unauthorized")
             ? 401

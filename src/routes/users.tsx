@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AdminLayout } from "@/components/admin/AdminLayout";
+import { QueryLoadError } from "@/components/admin/QueryLoadError";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -90,22 +91,36 @@ function UsersPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  const { data: users = [], isLoading } = useQuery({
+  const { data: users = [], isLoading, isError: usersError, refetch: refetchUsers } = useQuery({
     queryKey: ["workspace-users"],
     queryFn: listWorkspaceUsers,
   });
-  const { data: metricsMap = new Map() } = useQuery({
+  const {
+    data: metricsMap = new Map(),
+    isError: metricsError,
+    refetch: refetchMetrics,
+  } = useQuery({
     queryKey: ["users-metrics"],
     queryFn: fetchUserMetricsMap,
   });
-  const { data: courses = [] } = useQuery({
+  const {
+    data: courses = [],
+    isError: coursesError,
+    refetch: refetchCourses,
+  } = useQuery({
     queryKey: ["courses"],
     queryFn: listCourses,
   });
-  const { data: courseDeptMap = {} } = useQuery({
+  const {
+    data: courseDeptMap,
+    isError: deptMapError,
+    refetch: refetchDeptMap,
+  } = useQuery({
     queryKey: ["all-course-departments"],
     queryFn: getAllCourseDepartments,
   });
+
+  const loadFailed = usersError || metricsError || coursesError || deptMapError;
 
   const setDept = useMutation({
     mutationFn: ({ userId, department }: { userId: string; department: string | null }) =>
@@ -187,13 +202,12 @@ function UsersPage() {
       const matchC =
         courseFilter === "all"
           ? true
-          : (() => {
-              const depts =
-                courseDeptMap instanceof Map
-                  ? courseDeptMap.get(courseFilter)
-                  : undefined;
-              return !!u.department && (depts?.includes(u.department) ?? false);
-            })();
+          : !courseDeptMap
+            ? true
+            : (() => {
+                const depts = courseDeptMap.get(courseFilter);
+                return !!u.department && (depts?.includes(u.department) ?? false);
+              })();
       const matchComp =
         completionFilter === "all"
           ? true
@@ -295,6 +309,17 @@ function UsersPage() {
       }
     >
       <div className="space-y-4">
+        {loadFailed ? (
+          <QueryLoadError
+            message="Could not load user directory data"
+            onRetry={() => {
+              void refetchUsers();
+              void refetchMetrics();
+              void refetchCourses();
+              void refetchDeptMap();
+            }}
+          />
+        ) : null}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <SummaryCard label="Total users" value={stats.total} />
           <SummaryCard label="Assigned" value={stats.assigned} />
@@ -454,7 +479,9 @@ function UsersPage() {
                   <tr>
                     <td colSpan={9} className="px-4 py-8 text-center text-muted-foreground">
                       <GraduationCap className="mx-auto mb-2 h-6 w-6" />
-                      No users match your filters.
+                      {users.length === 0 && !isLoading
+                        ? "No users in the workspace yet."
+                        : "No users match your filters."}
                     </td>
                   </tr>
                 ) : (

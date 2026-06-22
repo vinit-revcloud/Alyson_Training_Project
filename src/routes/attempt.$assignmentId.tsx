@@ -2,6 +2,7 @@ import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { z } from "zod";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,10 +20,10 @@ import {
   XCircle,
 } from "lucide-react";
 import { useServerFn } from "@tanstack/react-start";
-import { getAssessment } from "@/lib/assessments-api";
 import {
   expireAssignment,
   getAttemptQuestions,
+  getLearnerAssessmentMetadataFn,
   getLearnerAssignmentFn,
   gradeAndSubmitAttempt,
   startAttempt as startAttemptFn,
@@ -30,7 +31,10 @@ import {
 import { useSession } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
+const assignmentParamsSchema = z.object({ assignmentId: z.string().uuid() });
+
 export const Route = createFileRoute("/attempt/$assignmentId")({
+  params: assignmentParamsSchema,
   head: () => ({ meta: [{ title: "Take Test — Alyson" }] }),
   component: AttemptPage,
 });
@@ -59,7 +63,7 @@ function AttemptPage() {
   const { user, loading: sessionLoading } = useSession();
   const qc = useQueryClient();
 
-  const { data: assignment, isLoading } = useQuery({
+  const { data: assignment, isLoading, isError: assignmentError, refetch: refetchAssignment } = useQuery({
     queryKey: ["assignment", assignmentId],
     queryFn: async () => {
       const row = await getLearnerAssignmentFn({ data: { assignmentId } });
@@ -67,11 +71,10 @@ function AttemptPage() {
     },
   });
 
-  if (!isLoading && !assignment) throw notFound();
-
-  const { data: assessment } = useQuery({
-    queryKey: ["assessment", assignment?.assessment_id],
-    queryFn: () => getAssessment(assignment!.assessment_id),
+  const loadAssessmentMeta = useServerFn(getLearnerAssessmentMetadataFn);
+  const { data: assessment, isError: assessmentError } = useQuery({
+    queryKey: ["learner-assessment-meta", assignmentId],
+    queryFn: () => loadAssessmentMeta({ data: { assignmentId } }),
     enabled: !!assignment?.assessment_id,
   });
   const fetchQuestions = useServerFn(getAttemptQuestions);
@@ -168,6 +171,31 @@ function AttemptPage() {
     assignment.status !== "passed" &&
     assignment.status !== "failed_capped";
 
+  if (!isLoading && !assignment && !assignmentError) throw notFound();
+
+  if (sessionLoading || isLoading) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-background">
+        <p className="text-sm text-muted-foreground">Loading assignment…</p>
+      </div>
+    );
+  }
+
+  if (assignmentError || assessmentError) {
+    return (
+      <div className="mx-auto max-w-lg px-5 py-12">
+        <p className="text-sm text-destructive">
+          Could not load this assignment. Check your connection and try again.
+        </p>
+        <Button variant="outline" size="sm" className="mt-3" onClick={() => void refetchAssignment()}>
+          Retry
+        </Button>
+      </div>
+    );
+  }
+
+  if (!assignment) throw notFound();
+
   return (
     <div className="min-h-dvh bg-background">
       <header className="border-b border-border bg-card/80 backdrop-blur">
@@ -192,7 +220,7 @@ function AttemptPage() {
               Alyson Training · {assignment?.mode === "practice" ? "Practice" : "Final"} Assessment
             </div>
             <h1 className="mt-3 font-display text-2xl leading-tight md:text-3xl">
-              {assessment?.title ?? "Loading…"}
+              {assessment?.title ?? "Assessment"}
             </h1>
             <div className="mt-4 flex flex-wrap items-center gap-1.5 text-[11px]">
               <StatusBadge status={effectiveStatus} />

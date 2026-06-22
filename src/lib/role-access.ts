@@ -19,7 +19,7 @@ const ADMIN_ONLY_PREFIXES = [
 
 const HIRING_MANAGER_PREFIXES = ["/interviews", "/hiring"];
 
-const CEO_READ_PREFIXES = ["/", "/analytics", "/hiring", "/executive"];
+const CEO_READ_PREFIXES = ["/", "/analytics", "/hiring", "/executive", "/interviews"];
 
 export function hasRole(roles: string[], role: WorkspaceRole): boolean {
   return roles.includes(role);

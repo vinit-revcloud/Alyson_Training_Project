@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireDbAuth } from "@/integrations/neon/auth-middleware";
 import { getPgPool } from "@/lib/pg.server";
+import { assertLearnerCourseAccess } from "@/lib/learn-access.server";
 import {
   acknowledgePolicyInDb,
   countPendingPoliciesForUser,
@@ -26,7 +27,10 @@ export const getSectionContentFn = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
     z.object({ courseId: z.string().uuid(), sectionId: z.string().uuid() }).parse(d),
   )
-  .handler(async ({ data }) => getSectionContentFromDb(data.courseId, data.sectionId));
+  .handler(async ({ data, context }) => {
+    await assertLearnerCourseAccess(context.userId, data.courseId);
+    return getSectionContentFromDb(data.courseId, data.sectionId);
+  });
 
 export const markSectionVisitedFn = createServerFn({ method: "POST" })
   .middleware([requireDbAuth])
@@ -40,6 +44,7 @@ export const markSectionVisitedFn = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data, context }) => {
+    await assertLearnerCourseAccess(context.userId, data.courseId);
     const pool = getPgPool();
     await pool.query(
       `INSERT INTO study_activity (user_id, course_id, class_id, section_id, card_key, seconds_spent)

@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { AdminLayout } from "@/components/admin/AdminLayout";
+import { QueryLoadError } from "@/components/admin/QueryLoadError";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,7 +30,7 @@ function SettingsPage() {
   const saveSettings = useServerFn(saveEmailSettingsFn);
   const processQueue = useServerFn(processEmailQueueFn);
 
-  const { data: emailSettings, isLoading } = useQuery({
+  const { data: emailSettings, isLoading, isError, refetch } = useQuery({
     queryKey: ["email-settings"],
     queryFn: () => loadSettings(),
   });
@@ -74,6 +75,12 @@ function SettingsPage() {
 
   return (
     <AdminLayout title="Settings" subtitle="Workspace, integrations and notifications">
+      {isError ? (
+        <QueryLoadError
+          message="Could not load email settings"
+          onRetry={() => void refetch()}
+        />
+      ) : null}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <Card className="rounded-xl border-border bg-card p-5 shadow-soft">
           <div className="text-[14px] font-semibold">Workspace</div>
@@ -147,6 +154,10 @@ function SettingsPage() {
             <div className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" /> Loading email settings…
             </div>
+          ) : isError ? (
+            <p className="mt-4 text-sm text-muted-foreground">
+              Email toggles unavailable — use Retry above.
+            </p>
           ) : (
             <div className="mt-4 space-y-3">
               <ToggleRow
@@ -182,7 +193,7 @@ function SettingsPage() {
       <div className="mt-6 flex justify-end">
         <Button
           className="h-9 rounded-lg bg-primary text-primary-foreground hover:bg-primary-glow"
-          disabled={saveMut.isPending || isLoading}
+          disabled={saveMut.isPending || isLoading || isError}
           onClick={() => saveMut.mutate()}
         >
           {saveMut.isPending ? "Saving…" : "Save changes"}

@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { QueryLoadError } from "@/components/admin/QueryLoadError";
 import { listMyCourses } from "@/lib/learn-api";
 import { useSession } from "@/lib/auth";
 import { GraduationCap } from "lucide-react";
@@ -22,7 +23,7 @@ function LearnCoursesLayout() {
 
 function LearnCoursesIndex() {
   const { user } = useSession();
-  const { data: courses = [], isLoading } = useQuery({
+  const { data: courses = [], isLoading, isError, refetch } = useQuery({
     queryKey: ["my-courses", user?.id],
     queryFn: () => listMyCourses(user!.id),
     enabled: !!user?.id,
@@ -31,7 +32,9 @@ function LearnCoursesIndex() {
   return (
     <div className="mx-auto max-w-2xl space-y-4 p-4">
       <h1 className="text-xl font-semibold tracking-tight">My Courses</h1>
-      {isLoading ? (
+      {isError ? (
+        <QueryLoadError message="Could not load your courses" onRetry={() => void refetch()} />
+      ) : isLoading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : courses.length === 0 ? (
         <Card className="p-6 text-center text-sm text-muted-foreground">

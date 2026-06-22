@@ -3,9 +3,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Card } from "@/components/ui/card";
+import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -37,8 +38,12 @@ import {
   mergeDraftAnswers,
   saveLocalInterviewDraft,
 } from "@/lib/interview/interview-draft.shared";
+import { INTERVIEW_CANDIDATE_POLL_MS, INTERVIEW_POLL_OPTS } from "@/lib/query-options";
+
+const tokenParamsSchema = z.object({ token: z.string().min(16).max(128) });
 
 export const Route = createFileRoute("/interview/$token")({
+  params: tokenParamsSchema,
   head: () => ({ meta: [{ title: "Interview Test — Alyson" }] }),
   component: InterviewCandidatePage,
 });
@@ -61,16 +66,17 @@ function InterviewCandidatePage() {
   const qc = useQueryClient();
 
   const fetchState = useServerFn(getInterviewSessionByTokenFn);
-  const { data: state, isLoading, error } = useQuery({
+  const { data: state, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["interview-state", token],
     queryFn: () => fetchState({ data: { token } }),
     refetchInterval: (q) => {
       const s = q.state.data?.status;
       if (s === "waiting" || s === "opened" || s === "scheduled" || s === "in_progress") {
-        return 3000;
+        return INTERVIEW_CANDIDATE_POLL_MS;
       }
       return false;
     },
+    ...INTERVIEW_POLL_OPTS,
   });
 
   const [identityConfirmed, setIdentityConfirmed] = useState(false);
@@ -112,13 +118,28 @@ function InterviewCandidatePage() {
     );
   }
 
-  if (error || !state) {
+  if (isError || !state) {
+    const msg = error instanceof Error ? error.message : "";
+    const invalidLink = msg.includes("Invalid or expired") || (!isError && !state);
+    if (invalidLink) {
+      return (
+        <div className="mx-auto max-w-lg px-5 py-16 text-center">
+          <h1 className="text-lg font-semibold">Invalid link</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            This interview link is invalid or has expired. Contact HR for a new invitation.
+          </p>
+        </div>
+      );
+    }
     return (
       <div className="mx-auto max-w-lg px-5 py-16 text-center">
-        <h1 className="text-lg font-semibold">Invalid link</h1>
+        <h1 className="text-lg font-semibold">Connection problem</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          This interview link is invalid or has expired. Contact HR for a new invitation.
+          We could not reach the interview server. Check your connection and try again.
         </p>
+        <Button variant="outline" size="sm" className="mt-4" onClick={() => void refetch()}>
+          Retry
+        </Button>
       </div>
     );
   }
@@ -362,7 +383,7 @@ function TestStep({
   const logEvent = useServerFn(logInterviewEventFn);
   const submitFn = useServerFn(submitInterviewAttemptFn);
 
-  const { data: questionPayload, isLoading } = useQuery({
+  const { data: questionPayload, isLoading, isError: questionsError, refetch: refetchQuestions } = useQuery({
     queryKey: ["interview-questions", token],
     queryFn: () => fetchQuestions({ data: { token } }),
     staleTime: Infinity,
@@ -515,6 +536,20 @@ function TestStep({
 
   if (submitted) {
     return <DoneStep state={state} />;
+  }
+
+  if (questionsError) {
+    return (
+      <div className="mx-auto max-w-lg px-5 py-16 text-center">
+        <h1 className="text-lg font-semibold">Could not load questions</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Ask HR to verify the assessment, then try again.
+        </p>
+        <Button variant="outline" size="sm" className="mt-4" onClick={() => void refetchQuestions()}>
+          Retry
+        </Button>
+      </div>
+    );
   }
 
   if (isLoading || !answersLoaded) {
