@@ -26,7 +26,11 @@ export const listPipelinesFn = createServerFn({ method: "POST" })
 export const getPipelineDetailFn = createServerFn({ method: "POST" })
   .middleware([requireHiringRead])
   .inputValidator((d: unknown) => z.object({ pipelineId: z.string().uuid() }).parse(d))
-  .handler(async ({ data }) => getPipelineDetailFromDb(data.pipelineId));
+  .handler(async ({ data }) => {
+    const detail = await getPipelineDetailFromDb(data.pipelineId);
+    if (!detail) throw new Error("Pipeline not found");
+    return detail;
+  });
 
 const CreatePipelineInput = z.object({
   candidateName: z.string().min(2).max(200),

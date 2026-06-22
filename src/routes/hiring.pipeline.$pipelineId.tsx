@@ -29,6 +29,7 @@ import {
 } from "@/lib/hiring-pipeline/hiring-pipeline.shared";
 import { useSession } from "@/lib/auth";
 import { isExecutiveReadOnly } from "@/lib/role-access";
+import { ArrowLeft, Calendar, GitBranch, Mail, Video } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/hiring/pipeline/$pipelineId")({
@@ -74,9 +75,10 @@ function PipelineDetailPage() {
   const loadTests = useServerFn(listInterviewAssessmentsFn);
   const qc = useQueryClient();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ["pipeline-detail", pipelineId],
     queryFn: () => load({ data: { pipelineId } }),
+    retry: 1,
   });
 
   const { data: tests = [] } = useQuery({
@@ -184,10 +186,30 @@ function PipelineDetailPage() {
     }
   }, [data?.pipeline.candidate_name]);
 
-  if (isLoading || !data) {
+  if (isLoading) {
     return (
       <AdminLayout title="Pipeline" subtitle="Loading…">
         <PipelineDetailLoading />
+      </AdminLayout>
+    );
+  }
+
+  if (isError || !data) {
+    return (
+      <AdminLayout
+        title="Pipeline"
+        subtitle="Could not load candidate"
+        actions={
+          <Link to="/hiring/pipeline">
+            <Button size="sm" variant="outline" className="h-8 gap-1 text-xs">
+              <ArrowLeft className="h-3.5 w-3.5" /> Back to board
+            </Button>
+          </Link>
+        }
+      >
+        <p className="text-sm text-muted-foreground">
+          {error instanceof Error ? error.message : "Pipeline not found or you do not have access."}
+        </p>
       </AdminLayout>
     );
   }
