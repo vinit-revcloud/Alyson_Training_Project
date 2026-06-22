@@ -181,7 +181,14 @@ function AuthPage() {
         email={session.user.email}
         detail={bootstrapError}
         onRetry={retryBootstrap}
-        onSignOut={() => navigate({ to: "/auth", search: AUTH_SEARCH_DEFAULTS })}
+        onSignOut={() =>
+          navigate({
+            to: "/auth",
+            search: searchToken
+              ? { mode: searchMode, email: searchEmail, token: searchToken }
+              : AUTH_SEARCH_DEFAULTS,
+          })
+        }
       />
     );
   }

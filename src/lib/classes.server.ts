@@ -65,6 +65,17 @@ export async function getCourseFromDb(courseId: string): Promise<CourseRow | nul
   return rows[0] ?? null;
 }
 
+export async function setCourseCoreOnboardingInDb(
+  courseId: string,
+  isCore: boolean,
+): Promise<void> {
+  const pool = getPgPool();
+  await pool.query(`UPDATE courses SET is_core_onboarding = $2, updated_at = now() WHERE id = $1`, [
+    courseId,
+    isCore,
+  ]);
+}
+
 export async function listClassesForCourseFromDb(courseId: string): Promise<ClassRow[]> {
   const pool = getPgPool();
   const { rows } = await pool.query<ClassRow>(

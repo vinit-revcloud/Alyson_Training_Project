@@ -12,6 +12,7 @@ import {
   PlusSquare,
   Mail,
   Video,
+  GitBranch,
 } from "lucide-react";
 
 export interface NavItem {
@@ -29,6 +30,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Invites", to: "/invites", icon: Mail },
   { label: "Assessments", to: "/assessments", icon: ClipboardCheck },
   { label: "Interviews", to: "/interviews", icon: Video },
+  { label: "Hiring Pipeline", to: "/hiring/pipeline", icon: GitBranch },
   { label: "Interview Tests", to: "/interviews/assessments", icon: ClipboardCheck },
   { label: "Hiring Reports", to: "/hiring/reports", icon: BarChart3 },
   { label: "Test Templates", to: "/assessments/templates", icon: FileText },

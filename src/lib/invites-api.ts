@@ -1,7 +1,6 @@
 import {
   createInviteFn,
   listInvitesFn,
-  previewInviteFn,
   resendInviteFn,
   revokeInviteFn,
   revokeInvitesFn,
@@ -65,5 +64,18 @@ export async function touchInvite(id: string): Promise<{
 }
 
 export async function previewInvite(token: string, email?: string) {
-  return previewInviteFn({ data: { token, email } });
+  const params = new URLSearchParams({ token });
+  if (email?.trim()) params.set("email", email.trim().toLowerCase());
+  const res = await fetch(`/api/invites/preview?${params.toString()}`);
+  if (!res.ok) {
+    return { valid: false as const, reason: "not_found" as const };
+  }
+  return res.json() as Promise<{
+    valid: boolean;
+    reason?: "not_found" | "accepted" | "expired" | "wrong_email";
+    email?: string;
+    role?: InviteRole;
+    department?: string | null;
+    expiresAt?: string;
+  }>;
 }

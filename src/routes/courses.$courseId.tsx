@@ -1,6 +1,7 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import {
   DndContext,
   DragOverlay,
@@ -53,6 +54,8 @@ import {
   Users,
 } from "lucide-react";
 import { BulkClassImportDialog } from "@/components/admin/BulkClassImportDialog";
+import { Switch } from "@/components/ui/switch";
+import { setCourseCoreOnboardingFn } from "@/lib/classes.functions";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -92,6 +95,16 @@ function CourseDetail() {
   const { data: assignedDepts = [] } = useQuery({
     queryKey: ["course-departments", courseId],
     queryFn: () => getCourseDepartments(courseId),
+  });
+
+  const setCoreFn = useServerFn(setCourseCoreOnboardingFn);
+  const coreMut = useMutation({
+    mutationFn: (isCore: boolean) => setCoreFn({ data: { courseId, isCore } }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["course", courseId] });
+      toast.success("Core onboarding setting updated");
+    },
+    onError: (e: Error) => toast.error(e.message),
   });
 
   if (!courseLoading && !course) throw notFound();
@@ -146,6 +159,19 @@ function CourseDetail() {
                     {t}
                   </Badge>
                 ))}
+              </div>
+              <div className="mt-4 flex items-center justify-between rounded-lg border border-border bg-muted/30 p-3">
+                <div>
+                  <p className="text-sm font-medium">Core onboarding course</p>
+                  <p className="text-xs text-muted-foreground">
+                    Auto-assigned to all new joiners on hire
+                  </p>
+                </div>
+                <Switch
+                  checked={course.is_core_onboarding}
+                  disabled={coreMut.isPending}
+                  onCheckedChange={(v) => coreMut.mutate(v)}
+                />
               </div>
             </div>
           </Card>

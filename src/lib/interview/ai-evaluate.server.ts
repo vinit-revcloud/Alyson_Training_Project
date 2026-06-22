@@ -452,6 +452,13 @@ ${questionEvals
       [sessionId, JSON.stringify(evaluation), weightedScore, recommendation],
     );
 
+    const { maybeAdvancePipelineFromInterviewEval } = await import(
+      "@/lib/hiring-pipeline/hiring-pipeline.server"
+    );
+    await maybeAdvancePipelineFromInterviewEval(sessionId).catch((err) => {
+      console.warn("[pipeline] auto-advance after interview eval failed", err);
+    });
+
     return evaluation;
   } catch (e) {
     await pool.query(

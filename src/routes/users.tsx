@@ -38,10 +38,8 @@ import {
   CheckCircle2,
   Clock,
 } from "lucide-react";
-import {
-  DEPARTMENTS,
-  updateUserDepartment,
-} from "@/lib/assignments-api";
+import { STAGE_LABELS } from "@/lib/hiring-pipeline/hiring-pipeline.shared";
+import { DEPARTMENTS, updateUserDepartment } from "@/lib/assignments-api";
 import {
   listWorkspaceUsers,
   setUsersRole,
@@ -546,6 +544,15 @@ function UsersPage() {
                                 Suspended
                               </Badge>
                             ) : null}
+                            {u.pipeline_stage ? (
+                              <Badge
+                                variant="outline"
+                                className="w-fit rounded-md text-[10px]"
+                              >
+                                {STAGE_LABELS[u.pipeline_stage as keyof typeof STAGE_LABELS] ??
+                                  u.pipeline_stage}
+                              </Badge>
+                            ) : null}
                           </div>
                         </td>
                         <td className="px-4 py-3">
@@ -649,7 +656,31 @@ function UsersPage() {
                                 <Row label="Average score" value={u.assigned_courses === 0 ? "—" : `${m.avgScore}%`} />
                                 <Row label="Status" value={m.status} />
                               </div>
-                              <div className="mt-3 flex gap-1.5">
+                              <div className="mt-3 flex flex-wrap gap-1.5">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 rounded-md text-[11px]"
+                                  asChild
+                                >
+                                  <Link
+                                    to="/users/$userId/learner"
+                                    params={{ userId: u.user_id }}
+                                  >
+                                    Learner 360
+                                  </Link>
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 rounded-md text-[11px]"
+                                  onClick={() => {
+                                    localStorage.setItem("alyson-view-mode", "student");
+                                    window.open("/learn/dashboard", "_blank");
+                                  }}
+                                >
+                                  View as learner
+                                </Button>
                                 <Button
                                   size="sm"
                                   variant="outline"

@@ -33,6 +33,7 @@ import {
   FileText,
   Activity,
   Sparkles,
+  GitBranch,
   Clock,
 } from "lucide-react";
 import {
@@ -180,6 +181,50 @@ function Dashboard() {
           <MetricCard label="Completion %" value={`${avgScore}%`} icon={Award} sub="across assignments" />
           <MetricCard label="Overdue" value={String(overdue)} trend={overdue > 0 ? "down" : "flat"} icon={Clock} sub="past due date" />
         </div>
+
+        {(data?.pipelineByStage?.length ?? 0) > 0 ? (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Card className="rounded-xl border-border p-4 shadow-soft">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <GitBranch className="h-4 w-4 text-primary" /> Active pipelines
+              </div>
+              <ul className="mt-3 space-y-1.5 text-xs">
+                {data!.pipelineByStage.map((s) => (
+                  <li key={s.stage} className="flex justify-between">
+                    <span className="text-muted-foreground">{s.label}</span>
+                    <span className="font-medium">{s.count}</span>
+                  </li>
+                ))}
+              </ul>
+              <Link to="/hiring/pipeline" className="mt-3 inline-block text-xs text-primary hover:underline">
+                View pipeline →
+              </Link>
+            </Card>
+            <MetricCard
+              label="Overdue learners"
+              value={String(data?.overdueLearners ?? 0)}
+              icon={AlertTriangle}
+              sub="past assignment due date"
+            />
+            <Card className="rounded-xl border-border p-4 shadow-soft sm:col-span-2">
+              <div className="text-sm font-semibold">Onboarding by role track</div>
+              <ul className="mt-3 space-y-1.5 text-xs">
+                {(data?.onboardingTrackCompletion ?? []).length === 0 ? (
+                  <li className="text-muted-foreground">No enrollments yet</li>
+                ) : (
+                  data!.onboardingTrackCompletion.map((t) => (
+                    <li key={t.department} className="flex justify-between">
+                      <span>{t.department}</span>
+                      <span>
+                        {t.completed}/{t.total} completed
+                      </span>
+                    </li>
+                  ))
+                )}
+              </ul>
+            </Card>
+          </div>
+        ) : null}
 
         {/* Quick actions */}
         <Card className="rounded-xl border-border bg-card p-4 shadow-soft">

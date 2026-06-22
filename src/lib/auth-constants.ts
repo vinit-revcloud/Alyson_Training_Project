@@ -10,7 +10,9 @@ export function isAllowedEmail(email: string | null | undefined): boolean {
 
 export function postAuthHomePath(roles: string[] | null | undefined): string {
   if (!roles?.length) return "/auth";
-  if (roles.length === 1 && roles[0] === "trainee") return "/learn";
+  if (roles.length === 1 && (roles[0] === "trainee" || roles[0] === "candidate")) {
+    return "/learn/dashboard";
+  }
   if (roles.length === 1 && roles[0] === "hiring_manager") return "/interviews";
   if (roles.length === 1 && roles[0] === "ceo") return "/hiring/reports";
   return "/";

@@ -10,7 +10,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { signOut, useSession } from "@/lib/auth";
 import { AUTH_SEARCH_DEFAULTS } from "@/lib/auth-constants";
 import { NoAccessPanel } from "@/components/auth/NoAccessPanel";
-import { canAccessAdminRoute, hiringManagerHomePath, isHiringManagerOnly, isTraineeOnly, navItemsForRoles } from "@/lib/role-access";
+import { canAccessAdminRoute, hiringManagerHomePath, isHiringManagerOnly, isLearnerOnly, navItemsForRoles } from "@/lib/role-access";
 import { useViewMode } from "@/lib/view-mode";
 import alysonLogo from "@/assets/alyson-logo.svg";
 
@@ -29,25 +29,25 @@ export function AdminLayout({
   const navigate = useNavigate();
   const { session, loading, bootstrapping, user, roles, bootstrapError, retryBootstrap } = useSession();
   const { mode, setMode } = useViewMode();
-  const traineeOnly = isTraineeOnly(roles);
+  const learnerOnly = isLearnerOnly(roles);
   const visibleNav = navItemsForRoles(roles);
 
   useEffect(() => {
     if (loading || bootstrapping) return;
-    if (traineeOnly && mode !== "student") {
+    if (learnerOnly && mode !== "student") {
       setMode("student");
-      navigate({ to: "/learn" });
+      navigate({ to: "/learn/dashboard" });
     }
-  }, [loading, bootstrapping, traineeOnly, mode, setMode, navigate]);
+  }, [loading, bootstrapping, learnerOnly, mode, setMode, navigate]);
 
   useEffect(() => {
     if (loading || bootstrapping) return;
     if (session && roles.length > 0 && !canAccessAdminRoute(pathname, roles)) {
       navigate({
-        to: traineeOnly ? "/learn" : isHiringManagerOnly(roles) ? hiringManagerHomePath() : "/",
+        to: learnerOnly ? "/learn/dashboard" : isHiringManagerOnly(roles) ? hiringManagerHomePath() : "/",
       });
     }
-  }, [loading, bootstrapping, session, roles, pathname, navigate, traineeOnly]);
+  }, [loading, bootstrapping, session, roles, pathname, navigate, learnerOnly]);
 
   useEffect(() => {
     if (loading || bootstrapping) return;

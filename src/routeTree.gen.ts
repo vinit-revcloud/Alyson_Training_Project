@@ -27,13 +27,19 @@ import { Route as LearnIndexRouteImport } from './routes/learn.index'
 import { Route as InterviewsIndexRouteImport } from './routes/interviews.index'
 import { Route as CoursesIndexRouteImport } from './routes/courses.index'
 import { Route as AssessmentsIndexRouteImport } from './routes/assessments.index'
+import { Route as SettingsPoliciesRouteImport } from './routes/settings.policies'
 import { Route as NotificationsTemplatesRouteImport } from './routes/notifications.templates'
 import { Route as NotificationsSchedulesRouteImport } from './routes/notifications.schedules'
+import { Route as LearnTrialRouteImport } from './routes/learn.trial'
+import { Route as LearnPoliciesRouteImport } from './routes/learn.policies'
+import { Route as LearnDashboardRouteImport } from './routes/learn.dashboard'
 import { Route as LearnCoursesRouteImport } from './routes/learn.courses'
+import { Route as LearnAssignmentsRouteImport } from './routes/learn.assignments'
 import { Route as InterviewsAssessmentsRouteImport } from './routes/interviews.assessments'
 import { Route as InterviewsSessionIdRouteImport } from './routes/interviews.$sessionId'
 import { Route as InterviewTokenRouteImport } from './routes/interview.$token'
 import { Route as HiringReportsRouteImport } from './routes/hiring.reports'
+import { Route as HiringPipelineRouteImport } from './routes/hiring.pipeline'
 import { Route as CoursesCourseIdRouteImport } from './routes/courses.$courseId'
 import { Route as ClassesNewRouteImport } from './routes/classes.new'
 import { Route as ClassesClassIdRouteImport } from './routes/classes.$classId'
@@ -41,14 +47,19 @@ import { Route as AttemptAssignmentIdRouteImport } from './routes/attempt.$assig
 import { Route as AssessmentsTemplatesRouteImport } from './routes/assessments.templates'
 import { Route as AssessmentsBuilderRouteImport } from './routes/assessments.builder'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
+import { Route as HiringPipelineIndexRouteImport } from './routes/hiring.pipeline.index'
+import { Route as UsersUserIdLearnerRouteImport } from './routes/users.$userId.learner'
+import { Route as HiringPipelinePipelineIdRouteImport } from './routes/hiring.pipeline.$pipelineId'
 import { Route as AssessmentsAssessmentIdPreviewRouteImport } from './routes/assessments.$assessmentId.preview'
 import { Route as ApiWebhooksSesRouteImport } from './routes/api/webhooks/ses'
+import { Route as ApiInvitesPreviewRouteImport } from './routes/api/invites/preview'
 import { Route as ApiClassesSectionAssetRouteImport } from './routes/api/classes/section-asset'
 import { Route as ApiClassesFinalizeRouteImport } from './routes/api/classes/finalize'
 import { Route as ApiClassesCreateRouteImport } from './routes/api/classes/create'
 import { Route as ApiAuthRolesRouteImport } from './routes/api/auth/roles'
 import { Route as ApiAuthBootstrapRouteImport } from './routes/api/auth/bootstrap'
 import { Route as ApiAssetsSplatRouteImport } from './routes/api/assets/$'
+import { Route as LearnGuideCourseIdSectionIdRouteImport } from './routes/learn.guide.$courseId.$sectionId'
 import { Route as LearnCoursesCourseIdStudyRouteImport } from './routes/learn.courses.$courseId.study'
 import { Route as ApiPublicHooksWeeklySummaryRouteImport } from './routes/api/public/hooks/weekly-summary'
 import { Route as ApiPublicHooksRetryFailedRouteImport } from './routes/api/public/hooks/retry-failed'
@@ -150,6 +161,11 @@ const AssessmentsIndexRoute = AssessmentsIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AssessmentsRoute,
 } as any)
+const SettingsPoliciesRoute = SettingsPoliciesRouteImport.update({
+  id: '/policies',
+  path: '/policies',
+  getParentRoute: () => SettingsRoute,
+} as any)
 const NotificationsTemplatesRoute = NotificationsTemplatesRouteImport.update({
   id: '/templates',
   path: '/templates',
@@ -160,9 +176,29 @@ const NotificationsSchedulesRoute = NotificationsSchedulesRouteImport.update({
   path: '/schedules',
   getParentRoute: () => NotificationsRoute,
 } as any)
+const LearnTrialRoute = LearnTrialRouteImport.update({
+  id: '/trial',
+  path: '/trial',
+  getParentRoute: () => LearnRoute,
+} as any)
+const LearnPoliciesRoute = LearnPoliciesRouteImport.update({
+  id: '/policies',
+  path: '/policies',
+  getParentRoute: () => LearnRoute,
+} as any)
+const LearnDashboardRoute = LearnDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => LearnRoute,
+} as any)
 const LearnCoursesRoute = LearnCoursesRouteImport.update({
   id: '/courses',
   path: '/courses',
+  getParentRoute: () => LearnRoute,
+} as any)
+const LearnAssignmentsRoute = LearnAssignmentsRouteImport.update({
+  id: '/assignments',
+  path: '/assignments',
   getParentRoute: () => LearnRoute,
 } as any)
 const InterviewsAssessmentsRoute = InterviewsAssessmentsRouteImport.update({
@@ -183,6 +219,11 @@ const InterviewTokenRoute = InterviewTokenRouteImport.update({
 const HiringReportsRoute = HiringReportsRouteImport.update({
   id: '/hiring/reports',
   path: '/hiring/reports',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HiringPipelineRoute = HiringPipelineRouteImport.update({
+  id: '/hiring/pipeline',
+  path: '/hiring/pipeline',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CoursesCourseIdRoute = CoursesCourseIdRouteImport.update({
@@ -220,6 +261,22 @@ const ApiHealthRoute = ApiHealthRouteImport.update({
   path: '/api/health',
   getParentRoute: () => rootRouteImport,
 } as any)
+const HiringPipelineIndexRoute = HiringPipelineIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => HiringPipelineRoute,
+} as any)
+const UsersUserIdLearnerRoute = UsersUserIdLearnerRouteImport.update({
+  id: '/$userId/learner',
+  path: '/$userId/learner',
+  getParentRoute: () => UsersRoute,
+} as any)
+const HiringPipelinePipelineIdRoute =
+  HiringPipelinePipelineIdRouteImport.update({
+    id: '/$pipelineId',
+    path: '/$pipelineId',
+    getParentRoute: () => HiringPipelineRoute,
+  } as any)
 const AssessmentsAssessmentIdPreviewRoute =
   AssessmentsAssessmentIdPreviewRouteImport.update({
     id: '/$assessmentId/preview',
@@ -229,6 +286,11 @@ const AssessmentsAssessmentIdPreviewRoute =
 const ApiWebhooksSesRoute = ApiWebhooksSesRouteImport.update({
   id: '/api/webhooks/ses',
   path: '/api/webhooks/ses',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiInvitesPreviewRoute = ApiInvitesPreviewRouteImport.update({
+  id: '/api/invites/preview',
+  path: '/api/invites/preview',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiClassesSectionAssetRoute = ApiClassesSectionAssetRouteImport.update({
@@ -261,6 +323,12 @@ const ApiAssetsSplatRoute = ApiAssetsSplatRouteImport.update({
   path: '/api/assets/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LearnGuideCourseIdSectionIdRoute =
+  LearnGuideCourseIdSectionIdRouteImport.update({
+    id: '/guide/$courseId/$sectionId',
+    path: '/guide/$courseId/$sectionId',
+    getParentRoute: () => LearnRoute,
+  } as any)
 const LearnCoursesCourseIdStudyRoute =
   LearnCoursesCourseIdStudyRouteImport.update({
     id: '/$courseId/study',
@@ -331,8 +399,8 @@ export interface FileRoutesByFullPath {
   '/invites': typeof InvitesRoute
   '/learn': typeof LearnRouteWithChildren
   '/notifications': typeof NotificationsRouteWithChildren
-  '/settings': typeof SettingsRoute
-  '/users': typeof UsersRoute
+  '/settings': typeof SettingsRouteWithChildren
+  '/users': typeof UsersRouteWithChildren
   '/api/health': typeof ApiHealthRoute
   '/assessments/builder': typeof AssessmentsBuilderRoute
   '/assessments/templates': typeof AssessmentsTemplatesRoute
@@ -340,13 +408,19 @@ export interface FileRoutesByFullPath {
   '/classes/$classId': typeof ClassesClassIdRoute
   '/classes/new': typeof ClassesNewRoute
   '/courses/$courseId': typeof CoursesCourseIdRoute
+  '/hiring/pipeline': typeof HiringPipelineRouteWithChildren
   '/hiring/reports': typeof HiringReportsRoute
   '/interview/$token': typeof InterviewTokenRoute
   '/interviews/$sessionId': typeof InterviewsSessionIdRoute
   '/interviews/assessments': typeof InterviewsAssessmentsRoute
+  '/learn/assignments': typeof LearnAssignmentsRoute
   '/learn/courses': typeof LearnCoursesRouteWithChildren
+  '/learn/dashboard': typeof LearnDashboardRoute
+  '/learn/policies': typeof LearnPoliciesRoute
+  '/learn/trial': typeof LearnTrialRoute
   '/notifications/schedules': typeof NotificationsSchedulesRoute
   '/notifications/templates': typeof NotificationsTemplatesRoute
+  '/settings/policies': typeof SettingsPoliciesRoute
   '/assessments/': typeof AssessmentsIndexRoute
   '/courses/': typeof CoursesIndexRoute
   '/interviews/': typeof InterviewsIndexRoute
@@ -357,8 +431,12 @@ export interface FileRoutesByFullPath {
   '/api/classes/create': typeof ApiClassesCreateRoute
   '/api/classes/finalize': typeof ApiClassesFinalizeRoute
   '/api/classes/section-asset': typeof ApiClassesSectionAssetRoute
+  '/api/invites/preview': typeof ApiInvitesPreviewRoute
   '/api/webhooks/ses': typeof ApiWebhooksSesRoute
   '/assessments/$assessmentId/preview': typeof AssessmentsAssessmentIdPreviewRoute
+  '/hiring/pipeline/$pipelineId': typeof HiringPipelinePipelineIdRoute
+  '/users/$userId/learner': typeof UsersUserIdLearnerRoute
+  '/hiring/pipeline/': typeof HiringPipelineIndexRoute
   '/api/internal/assets/delete': typeof ApiInternalAssetsDeleteRoute
   '/api/internal/assets/upload': typeof ApiInternalAssetsUploadRoute
   '/api/internal/cron/tick': typeof ApiInternalCronTickRoute
@@ -369,6 +447,7 @@ export interface FileRoutesByFullPath {
   '/api/public/hooks/retry-failed': typeof ApiPublicHooksRetryFailedRoute
   '/api/public/hooks/weekly-summary': typeof ApiPublicHooksWeeklySummaryRoute
   '/learn/courses/$courseId/study': typeof LearnCoursesCourseIdStudyRoute
+  '/learn/guide/$courseId/$sectionId': typeof LearnGuideCourseIdSectionIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -379,8 +458,8 @@ export interface FileRoutesByTo {
   '/executive': typeof ExecutiveRoute
   '/invites': typeof InvitesRoute
   '/notifications': typeof NotificationsRouteWithChildren
-  '/settings': typeof SettingsRoute
-  '/users': typeof UsersRoute
+  '/settings': typeof SettingsRouteWithChildren
+  '/users': typeof UsersRouteWithChildren
   '/api/health': typeof ApiHealthRoute
   '/assessments/builder': typeof AssessmentsBuilderRoute
   '/assessments/templates': typeof AssessmentsTemplatesRoute
@@ -392,9 +471,14 @@ export interface FileRoutesByTo {
   '/interview/$token': typeof InterviewTokenRoute
   '/interviews/$sessionId': typeof InterviewsSessionIdRoute
   '/interviews/assessments': typeof InterviewsAssessmentsRoute
+  '/learn/assignments': typeof LearnAssignmentsRoute
   '/learn/courses': typeof LearnCoursesRouteWithChildren
+  '/learn/dashboard': typeof LearnDashboardRoute
+  '/learn/policies': typeof LearnPoliciesRoute
+  '/learn/trial': typeof LearnTrialRoute
   '/notifications/schedules': typeof NotificationsSchedulesRoute
   '/notifications/templates': typeof NotificationsTemplatesRoute
+  '/settings/policies': typeof SettingsPoliciesRoute
   '/assessments': typeof AssessmentsIndexRoute
   '/courses': typeof CoursesIndexRoute
   '/interviews': typeof InterviewsIndexRoute
@@ -405,8 +489,12 @@ export interface FileRoutesByTo {
   '/api/classes/create': typeof ApiClassesCreateRoute
   '/api/classes/finalize': typeof ApiClassesFinalizeRoute
   '/api/classes/section-asset': typeof ApiClassesSectionAssetRoute
+  '/api/invites/preview': typeof ApiInvitesPreviewRoute
   '/api/webhooks/ses': typeof ApiWebhooksSesRoute
   '/assessments/$assessmentId/preview': typeof AssessmentsAssessmentIdPreviewRoute
+  '/hiring/pipeline/$pipelineId': typeof HiringPipelinePipelineIdRoute
+  '/users/$userId/learner': typeof UsersUserIdLearnerRoute
+  '/hiring/pipeline': typeof HiringPipelineIndexRoute
   '/api/internal/assets/delete': typeof ApiInternalAssetsDeleteRoute
   '/api/internal/assets/upload': typeof ApiInternalAssetsUploadRoute
   '/api/internal/cron/tick': typeof ApiInternalCronTickRoute
@@ -417,6 +505,7 @@ export interface FileRoutesByTo {
   '/api/public/hooks/retry-failed': typeof ApiPublicHooksRetryFailedRoute
   '/api/public/hooks/weekly-summary': typeof ApiPublicHooksWeeklySummaryRoute
   '/learn/courses/$courseId/study': typeof LearnCoursesCourseIdStudyRoute
+  '/learn/guide/$courseId/$sectionId': typeof LearnGuideCourseIdSectionIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -432,8 +521,8 @@ export interface FileRoutesById {
   '/invites': typeof InvitesRoute
   '/learn': typeof LearnRouteWithChildren
   '/notifications': typeof NotificationsRouteWithChildren
-  '/settings': typeof SettingsRoute
-  '/users': typeof UsersRoute
+  '/settings': typeof SettingsRouteWithChildren
+  '/users': typeof UsersRouteWithChildren
   '/api/health': typeof ApiHealthRoute
   '/assessments/builder': typeof AssessmentsBuilderRoute
   '/assessments/templates': typeof AssessmentsTemplatesRoute
@@ -441,13 +530,19 @@ export interface FileRoutesById {
   '/classes/$classId': typeof ClassesClassIdRoute
   '/classes/new': typeof ClassesNewRoute
   '/courses/$courseId': typeof CoursesCourseIdRoute
+  '/hiring/pipeline': typeof HiringPipelineRouteWithChildren
   '/hiring/reports': typeof HiringReportsRoute
   '/interview/$token': typeof InterviewTokenRoute
   '/interviews/$sessionId': typeof InterviewsSessionIdRoute
   '/interviews/assessments': typeof InterviewsAssessmentsRoute
+  '/learn/assignments': typeof LearnAssignmentsRoute
   '/learn/courses': typeof LearnCoursesRouteWithChildren
+  '/learn/dashboard': typeof LearnDashboardRoute
+  '/learn/policies': typeof LearnPoliciesRoute
+  '/learn/trial': typeof LearnTrialRoute
   '/notifications/schedules': typeof NotificationsSchedulesRoute
   '/notifications/templates': typeof NotificationsTemplatesRoute
+  '/settings/policies': typeof SettingsPoliciesRoute
   '/assessments/': typeof AssessmentsIndexRoute
   '/courses/': typeof CoursesIndexRoute
   '/interviews/': typeof InterviewsIndexRoute
@@ -458,8 +553,12 @@ export interface FileRoutesById {
   '/api/classes/create': typeof ApiClassesCreateRoute
   '/api/classes/finalize': typeof ApiClassesFinalizeRoute
   '/api/classes/section-asset': typeof ApiClassesSectionAssetRoute
+  '/api/invites/preview': typeof ApiInvitesPreviewRoute
   '/api/webhooks/ses': typeof ApiWebhooksSesRoute
   '/assessments/$assessmentId/preview': typeof AssessmentsAssessmentIdPreviewRoute
+  '/hiring/pipeline/$pipelineId': typeof HiringPipelinePipelineIdRoute
+  '/users/$userId/learner': typeof UsersUserIdLearnerRoute
+  '/hiring/pipeline/': typeof HiringPipelineIndexRoute
   '/api/internal/assets/delete': typeof ApiInternalAssetsDeleteRoute
   '/api/internal/assets/upload': typeof ApiInternalAssetsUploadRoute
   '/api/internal/cron/tick': typeof ApiInternalCronTickRoute
@@ -470,6 +569,7 @@ export interface FileRoutesById {
   '/api/public/hooks/retry-failed': typeof ApiPublicHooksRetryFailedRoute
   '/api/public/hooks/weekly-summary': typeof ApiPublicHooksWeeklySummaryRoute
   '/learn/courses/$courseId/study': typeof LearnCoursesCourseIdStudyRoute
+  '/learn/guide/$courseId/$sectionId': typeof LearnGuideCourseIdSectionIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -495,13 +595,19 @@ export interface FileRouteTypes {
     | '/classes/$classId'
     | '/classes/new'
     | '/courses/$courseId'
+    | '/hiring/pipeline'
     | '/hiring/reports'
     | '/interview/$token'
     | '/interviews/$sessionId'
     | '/interviews/assessments'
+    | '/learn/assignments'
     | '/learn/courses'
+    | '/learn/dashboard'
+    | '/learn/policies'
+    | '/learn/trial'
     | '/notifications/schedules'
     | '/notifications/templates'
+    | '/settings/policies'
     | '/assessments/'
     | '/courses/'
     | '/interviews/'
@@ -512,8 +618,12 @@ export interface FileRouteTypes {
     | '/api/classes/create'
     | '/api/classes/finalize'
     | '/api/classes/section-asset'
+    | '/api/invites/preview'
     | '/api/webhooks/ses'
     | '/assessments/$assessmentId/preview'
+    | '/hiring/pipeline/$pipelineId'
+    | '/users/$userId/learner'
+    | '/hiring/pipeline/'
     | '/api/internal/assets/delete'
     | '/api/internal/assets/upload'
     | '/api/internal/cron/tick'
@@ -524,6 +634,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/retry-failed'
     | '/api/public/hooks/weekly-summary'
     | '/learn/courses/$courseId/study'
+    | '/learn/guide/$courseId/$sectionId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -547,9 +658,14 @@ export interface FileRouteTypes {
     | '/interview/$token'
     | '/interviews/$sessionId'
     | '/interviews/assessments'
+    | '/learn/assignments'
     | '/learn/courses'
+    | '/learn/dashboard'
+    | '/learn/policies'
+    | '/learn/trial'
     | '/notifications/schedules'
     | '/notifications/templates'
+    | '/settings/policies'
     | '/assessments'
     | '/courses'
     | '/interviews'
@@ -560,8 +676,12 @@ export interface FileRouteTypes {
     | '/api/classes/create'
     | '/api/classes/finalize'
     | '/api/classes/section-asset'
+    | '/api/invites/preview'
     | '/api/webhooks/ses'
     | '/assessments/$assessmentId/preview'
+    | '/hiring/pipeline/$pipelineId'
+    | '/users/$userId/learner'
+    | '/hiring/pipeline'
     | '/api/internal/assets/delete'
     | '/api/internal/assets/upload'
     | '/api/internal/cron/tick'
@@ -572,6 +692,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/retry-failed'
     | '/api/public/hooks/weekly-summary'
     | '/learn/courses/$courseId/study'
+    | '/learn/guide/$courseId/$sectionId'
   id:
     | '__root__'
     | '/'
@@ -595,13 +716,19 @@ export interface FileRouteTypes {
     | '/classes/$classId'
     | '/classes/new'
     | '/courses/$courseId'
+    | '/hiring/pipeline'
     | '/hiring/reports'
     | '/interview/$token'
     | '/interviews/$sessionId'
     | '/interviews/assessments'
+    | '/learn/assignments'
     | '/learn/courses'
+    | '/learn/dashboard'
+    | '/learn/policies'
+    | '/learn/trial'
     | '/notifications/schedules'
     | '/notifications/templates'
+    | '/settings/policies'
     | '/assessments/'
     | '/courses/'
     | '/interviews/'
@@ -612,8 +739,12 @@ export interface FileRouteTypes {
     | '/api/classes/create'
     | '/api/classes/finalize'
     | '/api/classes/section-asset'
+    | '/api/invites/preview'
     | '/api/webhooks/ses'
     | '/assessments/$assessmentId/preview'
+    | '/hiring/pipeline/$pipelineId'
+    | '/users/$userId/learner'
+    | '/hiring/pipeline/'
     | '/api/internal/assets/delete'
     | '/api/internal/assets/upload'
     | '/api/internal/cron/tick'
@@ -624,6 +755,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/retry-failed'
     | '/api/public/hooks/weekly-summary'
     | '/learn/courses/$courseId/study'
+    | '/learn/guide/$courseId/$sectionId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -639,12 +771,13 @@ export interface RootRouteChildren {
   InvitesRoute: typeof InvitesRoute
   LearnRoute: typeof LearnRouteWithChildren
   NotificationsRoute: typeof NotificationsRouteWithChildren
-  SettingsRoute: typeof SettingsRoute
-  UsersRoute: typeof UsersRoute
+  SettingsRoute: typeof SettingsRouteWithChildren
+  UsersRoute: typeof UsersRouteWithChildren
   ApiHealthRoute: typeof ApiHealthRoute
   AttemptAssignmentIdRoute: typeof AttemptAssignmentIdRoute
   ClassesClassIdRoute: typeof ClassesClassIdRoute
   ClassesNewRoute: typeof ClassesNewRoute
+  HiringPipelineRoute: typeof HiringPipelineRouteWithChildren
   HiringReportsRoute: typeof HiringReportsRoute
   InterviewTokenRoute: typeof InterviewTokenRoute
   ApiAssetsSplatRoute: typeof ApiAssetsSplatRoute
@@ -653,6 +786,7 @@ export interface RootRouteChildren {
   ApiClassesCreateRoute: typeof ApiClassesCreateRoute
   ApiClassesFinalizeRoute: typeof ApiClassesFinalizeRoute
   ApiClassesSectionAssetRoute: typeof ApiClassesSectionAssetRoute
+  ApiInvitesPreviewRoute: typeof ApiInvitesPreviewRoute
   ApiWebhooksSesRoute: typeof ApiWebhooksSesRoute
   ApiInternalAssetsDeleteRoute: typeof ApiInternalAssetsDeleteRoute
   ApiInternalAssetsUploadRoute: typeof ApiInternalAssetsUploadRoute
@@ -793,6 +927,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AssessmentsIndexRouteImport
       parentRoute: typeof AssessmentsRoute
     }
+    '/settings/policies': {
+      id: '/settings/policies'
+      path: '/policies'
+      fullPath: '/settings/policies'
+      preLoaderRoute: typeof SettingsPoliciesRouteImport
+      parentRoute: typeof SettingsRoute
+    }
     '/notifications/templates': {
       id: '/notifications/templates'
       path: '/templates'
@@ -807,11 +948,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof NotificationsSchedulesRouteImport
       parentRoute: typeof NotificationsRoute
     }
+    '/learn/trial': {
+      id: '/learn/trial'
+      path: '/trial'
+      fullPath: '/learn/trial'
+      preLoaderRoute: typeof LearnTrialRouteImport
+      parentRoute: typeof LearnRoute
+    }
+    '/learn/policies': {
+      id: '/learn/policies'
+      path: '/policies'
+      fullPath: '/learn/policies'
+      preLoaderRoute: typeof LearnPoliciesRouteImport
+      parentRoute: typeof LearnRoute
+    }
+    '/learn/dashboard': {
+      id: '/learn/dashboard'
+      path: '/dashboard'
+      fullPath: '/learn/dashboard'
+      preLoaderRoute: typeof LearnDashboardRouteImport
+      parentRoute: typeof LearnRoute
+    }
     '/learn/courses': {
       id: '/learn/courses'
       path: '/courses'
       fullPath: '/learn/courses'
       preLoaderRoute: typeof LearnCoursesRouteImport
+      parentRoute: typeof LearnRoute
+    }
+    '/learn/assignments': {
+      id: '/learn/assignments'
+      path: '/assignments'
+      fullPath: '/learn/assignments'
+      preLoaderRoute: typeof LearnAssignmentsRouteImport
       parentRoute: typeof LearnRoute
     }
     '/interviews/assessments': {
@@ -840,6 +1009,13 @@ declare module '@tanstack/react-router' {
       path: '/hiring/reports'
       fullPath: '/hiring/reports'
       preLoaderRoute: typeof HiringReportsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/hiring/pipeline': {
+      id: '/hiring/pipeline'
+      path: '/hiring/pipeline'
+      fullPath: '/hiring/pipeline'
+      preLoaderRoute: typeof HiringPipelineRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/courses/$courseId': {
@@ -891,6 +1067,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiHealthRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/hiring/pipeline/': {
+      id: '/hiring/pipeline/'
+      path: '/'
+      fullPath: '/hiring/pipeline/'
+      preLoaderRoute: typeof HiringPipelineIndexRouteImport
+      parentRoute: typeof HiringPipelineRoute
+    }
+    '/users/$userId/learner': {
+      id: '/users/$userId/learner'
+      path: '/$userId/learner'
+      fullPath: '/users/$userId/learner'
+      preLoaderRoute: typeof UsersUserIdLearnerRouteImport
+      parentRoute: typeof UsersRoute
+    }
+    '/hiring/pipeline/$pipelineId': {
+      id: '/hiring/pipeline/$pipelineId'
+      path: '/$pipelineId'
+      fullPath: '/hiring/pipeline/$pipelineId'
+      preLoaderRoute: typeof HiringPipelinePipelineIdRouteImport
+      parentRoute: typeof HiringPipelineRoute
+    }
     '/assessments/$assessmentId/preview': {
       id: '/assessments/$assessmentId/preview'
       path: '/$assessmentId/preview'
@@ -903,6 +1100,13 @@ declare module '@tanstack/react-router' {
       path: '/api/webhooks/ses'
       fullPath: '/api/webhooks/ses'
       preLoaderRoute: typeof ApiWebhooksSesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/invites/preview': {
+      id: '/api/invites/preview'
+      path: '/api/invites/preview'
+      fullPath: '/api/invites/preview'
+      preLoaderRoute: typeof ApiInvitesPreviewRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/classes/section-asset': {
@@ -946,6 +1150,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/assets/$'
       preLoaderRoute: typeof ApiAssetsSplatRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/learn/guide/$courseId/$sectionId': {
+      id: '/learn/guide/$courseId/$sectionId'
+      path: '/guide/$courseId/$sectionId'
+      fullPath: '/learn/guide/$courseId/$sectionId'
+      preLoaderRoute: typeof LearnGuideCourseIdSectionIdRouteImport
+      parentRoute: typeof LearnRoute
     }
     '/learn/courses/$courseId/study': {
       id: '/learn/courses/$courseId/study'
@@ -1080,13 +1291,23 @@ const LearnCoursesRouteWithChildren = LearnCoursesRoute._addFileChildren(
 )
 
 interface LearnRouteChildren {
+  LearnAssignmentsRoute: typeof LearnAssignmentsRoute
   LearnCoursesRoute: typeof LearnCoursesRouteWithChildren
+  LearnDashboardRoute: typeof LearnDashboardRoute
+  LearnPoliciesRoute: typeof LearnPoliciesRoute
+  LearnTrialRoute: typeof LearnTrialRoute
   LearnIndexRoute: typeof LearnIndexRoute
+  LearnGuideCourseIdSectionIdRoute: typeof LearnGuideCourseIdSectionIdRoute
 }
 
 const LearnRouteChildren: LearnRouteChildren = {
+  LearnAssignmentsRoute: LearnAssignmentsRoute,
   LearnCoursesRoute: LearnCoursesRouteWithChildren,
+  LearnDashboardRoute: LearnDashboardRoute,
+  LearnPoliciesRoute: LearnPoliciesRoute,
+  LearnTrialRoute: LearnTrialRoute,
   LearnIndexRoute: LearnIndexRoute,
+  LearnGuideCourseIdSectionIdRoute: LearnGuideCourseIdSectionIdRoute,
 }
 
 const LearnRouteWithChildren = LearnRoute._addFileChildren(LearnRouteChildren)
@@ -1105,6 +1326,42 @@ const NotificationsRouteWithChildren = NotificationsRoute._addFileChildren(
   NotificationsRouteChildren,
 )
 
+interface SettingsRouteChildren {
+  SettingsPoliciesRoute: typeof SettingsPoliciesRoute
+}
+
+const SettingsRouteChildren: SettingsRouteChildren = {
+  SettingsPoliciesRoute: SettingsPoliciesRoute,
+}
+
+const SettingsRouteWithChildren = SettingsRoute._addFileChildren(
+  SettingsRouteChildren,
+)
+
+interface UsersRouteChildren {
+  UsersUserIdLearnerRoute: typeof UsersUserIdLearnerRoute
+}
+
+const UsersRouteChildren: UsersRouteChildren = {
+  UsersUserIdLearnerRoute: UsersUserIdLearnerRoute,
+}
+
+const UsersRouteWithChildren = UsersRoute._addFileChildren(UsersRouteChildren)
+
+interface HiringPipelineRouteChildren {
+  HiringPipelinePipelineIdRoute: typeof HiringPipelinePipelineIdRoute
+  HiringPipelineIndexRoute: typeof HiringPipelineIndexRoute
+}
+
+const HiringPipelineRouteChildren: HiringPipelineRouteChildren = {
+  HiringPipelinePipelineIdRoute: HiringPipelinePipelineIdRoute,
+  HiringPipelineIndexRoute: HiringPipelineIndexRoute,
+}
+
+const HiringPipelineRouteWithChildren = HiringPipelineRoute._addFileChildren(
+  HiringPipelineRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AnalyticsRoute: AnalyticsRoute,
@@ -1118,12 +1375,13 @@ const rootRouteChildren: RootRouteChildren = {
   InvitesRoute: InvitesRoute,
   LearnRoute: LearnRouteWithChildren,
   NotificationsRoute: NotificationsRouteWithChildren,
-  SettingsRoute: SettingsRoute,
-  UsersRoute: UsersRoute,
+  SettingsRoute: SettingsRouteWithChildren,
+  UsersRoute: UsersRouteWithChildren,
   ApiHealthRoute: ApiHealthRoute,
   AttemptAssignmentIdRoute: AttemptAssignmentIdRoute,
   ClassesClassIdRoute: ClassesClassIdRoute,
   ClassesNewRoute: ClassesNewRoute,
+  HiringPipelineRoute: HiringPipelineRouteWithChildren,
   HiringReportsRoute: HiringReportsRoute,
   InterviewTokenRoute: InterviewTokenRoute,
   ApiAssetsSplatRoute: ApiAssetsSplatRoute,
@@ -1132,6 +1390,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiClassesCreateRoute: ApiClassesCreateRoute,
   ApiClassesFinalizeRoute: ApiClassesFinalizeRoute,
   ApiClassesSectionAssetRoute: ApiClassesSectionAssetRoute,
+  ApiInvitesPreviewRoute: ApiInvitesPreviewRoute,
   ApiWebhooksSesRoute: ApiWebhooksSesRoute,
   ApiInternalAssetsDeleteRoute: ApiInternalAssetsDeleteRoute,
   ApiInternalAssetsUploadRoute: ApiInternalAssetsUploadRoute,

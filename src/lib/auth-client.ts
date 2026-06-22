@@ -3,6 +3,7 @@
 export type BootstrapInput = {
   inviteToken?: string;
   displayName?: string;
+  emailHint?: string;
 };
 
 export type BootstrapResult = {

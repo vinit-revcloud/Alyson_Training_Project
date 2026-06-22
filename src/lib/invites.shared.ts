@@ -18,6 +18,7 @@ export interface InviteRow {
   department: string | null;
   token: string;
   invited_by: string | null;
+  pipeline_id?: string | null;
   accepted_at: string | null;
   accepted_by: string | null;
   created_at: string;

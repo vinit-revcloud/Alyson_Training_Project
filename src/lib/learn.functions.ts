@@ -77,13 +77,22 @@ export const listMyCoursesFn = createServerFn({ method: "POST" })
       [data.userId],
     );
     const dept = profileRes.rows[0]?.department;
-    if (!dept) return [];
 
-    const deptRes = await pool.query<{ course_id: string }>(
-      `SELECT course_id FROM course_departments WHERE department = $1`,
-      [dept],
+    const coreRes = await pool.query<{ id: string }>(
+      `SELECT id FROM courses WHERE is_core_onboarding = true AND status = 'published'`,
     );
-    const courseIds = deptRes.rows.map((r) => r.course_id);
+    const deptRes = dept
+      ? await pool.query<{ course_id: string }>(
+          `SELECT course_id FROM course_departments WHERE department = $1`,
+          [dept],
+        )
+      : { rows: [] as { course_id: string }[] };
+    const courseIds = [
+      ...new Set([
+        ...deptRes.rows.map((r) => r.course_id),
+        ...coreRes.rows.map((r) => r.id),
+      ]),
+    ];
     if (!courseIds.length) return [];
 
     const [coursesRes, classesRes, activityRes] = await Promise.all([

@@ -5,6 +5,7 @@ export const WORKSPACE_ROLES = [
   "admin",
   "trainer",
   "trainee",
+  "candidate",
   "hiring_manager",
   "ceo",
 ] as const;
@@ -17,6 +18,7 @@ export const WORKSPACE_ROLE_OPTIONS: { value: WorkspaceRole; label: string }[] =
   { value: "admin", label: "Admin" },
   { value: "trainer", label: "Creator (Trainer)" },
   { value: "trainee", label: "Student (Trainee)" },
+  { value: "candidate", label: "Candidate (Trial / Onboarding)" },
   { value: "hiring_manager", label: "Hiring Manager (HR / Recruiter)" },
   { value: "ceo", label: "CEO (read-only)" },
 ];

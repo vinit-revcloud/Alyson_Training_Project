@@ -13,6 +13,7 @@ export interface InviteRow {
   department: string | null;
   token: string;
   invited_by: string | null;
+  pipeline_id?: string | null;
   accepted_at: string | null;
   accepted_by: string | null;
   created_at: string;
@@ -123,6 +124,7 @@ export async function createInviteRecord(input: {
   role: InviteRole;
   department?: string | null;
   invitedBy: string;
+  pipelineId?: string | null;
 }): Promise<InviteRow> {
   const pool = getPgPool();
   const email = input.email.trim().toLowerCase();
@@ -143,6 +145,7 @@ export async function createInviteRecord(input: {
        SET role = $2,
            department = $3,
            invited_by = $4,
+           pipeline_id = $5,
            token = encode(gen_random_bytes(16), 'hex'),
            created_at = now(),
            updated_at = now(),
@@ -150,16 +153,16 @@ export async function createInviteRecord(input: {
            accepted_by = NULL
        WHERE id = $1
        RETURNING *`,
-      [row.id, input.role, input.department ?? null, input.invitedBy],
+      [row.id, input.role, input.department ?? null, input.invitedBy, input.pipelineId ?? null],
     );
     return rows[0];
   }
 
   const { rows } = await pool.query<InviteRow>(
-    `INSERT INTO invites (email, role, department, invited_by)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO invites (email, role, department, invited_by, pipeline_id)
+     VALUES ($1, $2, $3, $4, $5)
      RETURNING *`,
-    [email, input.role, input.department ?? null, input.invitedBy],
+    [email, input.role, input.department ?? null, input.invitedBy, input.pipelineId ?? null],
   );
   return rows[0];
 }
@@ -212,12 +215,17 @@ export async function refreshInvite(id: string): Promise<InviteRow> {
 export async function consumeInviteForUser(
   client: PoolClient,
   input: { userId: string; email: string; inviteToken?: string },
-): Promise<{ role: InviteRole; department: string | null } | null> {
+): Promise<{ role: InviteRole; department: string | null; pipelineId: string | null } | null> {
   const { userId, email, inviteToken } = input;
-  let invite: { id: string; role: InviteRole; department: string | null } | null = null;
+  let invite: {
+    id: string;
+    role: InviteRole;
+    department: string | null;
+    pipeline_id: string | null;
+  } | null = null;
 
   if (inviteToken) {
-    const byToken = await client.query<InviteRow>(
+    const byToken = await client.query<InviteRow & { pipeline_id?: string | null }>(
       `SELECT * FROM invites WHERE token = $1 LIMIT 1`,
       [inviteToken],
     );
@@ -228,12 +236,17 @@ export async function consumeInviteForUser(
       row.email.toLowerCase() === email.toLowerCase() &&
       !isInviteExpired(row)
     ) {
-      invite = { id: row.id, role: row.role, department: row.department };
+      invite = {
+        id: row.id,
+        role: row.role,
+        department: row.department,
+        pipeline_id: row.pipeline_id ?? null,
+      };
     }
   }
 
   if (!invite) {
-    const byEmail = await client.query<InviteRow>(
+    const byEmail = await client.query<InviteRow & { pipeline_id?: string | null }>(
       `SELECT * FROM invites
        WHERE lower(email) = $1 AND accepted_at IS NULL
        ORDER BY created_at DESC LIMIT 1`,
@@ -241,7 +254,12 @@ export async function consumeInviteForUser(
     );
     const row = byEmail.rows[0];
     if (row && !isInviteExpired(row)) {
-      invite = { id: row.id, role: row.role, department: row.department };
+      invite = {
+        id: row.id,
+        role: row.role,
+        department: row.department,
+        pipeline_id: row.pipeline_id ?? null,
+      };
     }
   }
 
@@ -264,5 +282,9 @@ export async function consumeInviteForUser(
     [userId, invite.id],
   );
 
-  return { role: invite.role, department: invite.department };
+  return {
+    role: invite.role,
+    department: invite.department,
+    pipelineId: invite.pipeline_id,
+  };
 }

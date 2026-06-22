@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { AdminLayout } from "@/components/admin/AdminLayout";
@@ -117,6 +117,18 @@ function SettingsPage() {
             <Toggle label="AI grading for essay questions" defaultChecked />
             <Toggle label="Auto-shuffle questions on each attempt" defaultChecked />
           </div>
+        </Card>
+
+        <Card className="rounded-xl border-border bg-card p-5 shadow-soft">
+          <div className="text-[14px] font-semibold">HR policies</div>
+          <p className="mt-2 text-[12px] text-muted-foreground">
+            Upload handbook PDFs and manage learner acknowledgement requirements.
+          </p>
+          <Link to="/settings/policies" className="mt-4 inline-block">
+            <Button variant="outline" size="sm" className="rounded-lg">
+              Manage policies
+            </Button>
+          </Link>
         </Card>
 
         <Card className="rounded-xl border-border bg-card p-5 shadow-soft">

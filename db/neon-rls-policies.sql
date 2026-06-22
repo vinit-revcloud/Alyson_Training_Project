@@ -25,6 +25,7 @@ RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS
     AND (
       public.has_role(auth.uid(), 'admin'::public.app_role)
       OR public.has_role(auth.uid(), 'trainer'::public.app_role)
+      OR public.has_role(auth.uid(), 'hiring_manager'::public.app_role)
     );
 $$;
 
@@ -339,6 +340,37 @@ DROP POLICY IF EXISTS interview_sessions_cm ON public.interview_sessions;
 CREATE POLICY interview_sessions_cm ON public.interview_sessions FOR ALL TO authenticated
   USING (public.is_content_manager())
   WITH CHECK (public.is_content_manager());
+
+-- ============ LEARNER PANEL / ONBOARDING ============
+DROP POLICY IF EXISTS learner_path_assignments_own ON public.learner_path_assignments;
+CREATE POLICY learner_path_assignments_own ON public.learner_path_assignments
+  FOR SELECT TO authenticated USING (user_id = auth.uid());
+DROP POLICY IF EXISTS learner_path_assignments_own_update ON public.learner_path_assignments;
+CREATE POLICY learner_path_assignments_own_update ON public.learner_path_assignments
+  FOR UPDATE TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+DROP POLICY IF EXISTS learner_item_progress_own ON public.learner_item_progress;
+CREATE POLICY learner_item_progress_own ON public.learner_item_progress
+  FOR ALL TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+DROP POLICY IF EXISTS policy_documents_published ON public.policy_documents;
+CREATE POLICY policy_documents_published ON public.policy_documents
+  FOR SELECT TO authenticated USING (status = 'published');
+DROP POLICY IF EXISTS policy_documents_admin ON public.policy_documents;
+CREATE POLICY policy_documents_admin ON public.policy_documents
+  FOR ALL TO authenticated
+  USING (public.is_content_manager())
+  WITH CHECK (public.is_content_manager());
+
+DROP POLICY IF EXISTS policy_acknowledgements_own ON public.policy_acknowledgements;
+CREATE POLICY policy_acknowledgements_own ON public.policy_acknowledgements
+  FOR ALL TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
 
 -- RPC functions used by assignment + email flow
 GRANT EXECUTE ON FUNCTION public.auto_assign_course(uuid, uuid) TO authenticated;

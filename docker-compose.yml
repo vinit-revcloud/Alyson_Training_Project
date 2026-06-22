@@ -19,6 +19,9 @@ services:
       NODE_ENV: production
       PORT: 4173
       HOST: 0.0.0.0
+      # Runtime JWT verification — set in .env.production (same values as VITE_NEON_* build args)
+      NEON_AUTH_URL: ${NEON_AUTH_URL:-}
+      NEON_DATA_API_URL: ${NEON_DATA_API_URL:-}
     volumes:
       - alyson-storage:/app/storage
     restart: unless-stopped

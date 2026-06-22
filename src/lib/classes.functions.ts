@@ -11,6 +11,7 @@ import {
   getClassAssessmentSeedFromDb,
   getClassFromDb,
   getCourseFromDb,
+  setCourseCoreOnboardingInDb,
   getSectionAssetByIdFromDb,
   getSectionAssetsBySectionIdFromDb,
   insertSectionAssetInDb,
@@ -49,6 +50,19 @@ export const getCourseFn = createServerFn({ method: "POST" })
   .middleware([requireDbAuth])
   .inputValidator((data: unknown) => CourseIdSchema.parse(data))
   .handler(async ({ data }): Promise<CourseRow | null> => getCourseFromDb(data.courseId));
+
+const CoreOnboardingSchema = z.object({
+  courseId: z.string().uuid(),
+  isCore: z.boolean(),
+});
+
+export const setCourseCoreOnboardingFn = createServerFn({ method: "POST" })
+  .middleware([requireDbAuth, requireContentManager])
+  .inputValidator((data: unknown) => CoreOnboardingSchema.parse(data))
+  .handler(async ({ data }) => {
+    await setCourseCoreOnboardingInDb(data.courseId, data.isCore);
+    return { ok: true };
+  });
 
 export const listClassesForCourseFn = createServerFn({ method: "POST" })
   .middleware([requireDbAuth])

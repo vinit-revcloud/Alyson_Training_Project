@@ -30,23 +30,25 @@
 20. [Known Quirks & Technical Debt](#20-known-quirks--technical-debt)
 21. [Planning Checklist for New Work](#21-planning-checklist-for-new-work)
 22. [User Panel — Planning Guide](#22-user-panel--planning-guide)
+23. [Unified New Joiner & Hiring Pipeline](#23-unified-new-joiner--hiring-pipeline)
 
 ---
 
 ## 1. Platform Overview
 
-**Alyson Training** is an internal LMS and hiring assessment platform for **Cintara** (`@cintara.ai` domain only). It combines employee training workflows with candidate interview/hiring workflows in one app.
+**Alyson Training** is an internal LMS and hiring assessment platform for **Cintara** (`@cintara.ai` domain only). It combines employee training workflows with a **unified new-joiner hiring pipeline** (tech interviews → trial → CEO review → onboarding) in one app.
 
 ### Primary user personas
 
 | Persona | Role key | Primary surfaces |
 |---------|----------|------------------|
-| **Student / Trainee** | `trainee` | `/learn` — assignments, course study, test attempts |
+| **Student / Trainee** | `trainee` | `/learn/dashboard`, `/learn/guide/*`, `/learn/assignments` — onboarding guides + assessments |
+| **Trial candidate** | `candidate` | `/learn/dashboard`, `/learn/trial`, `/learn/guide/*` — trial project + core onboarding (DocsLearnLayout) |
 | **Creator / Trainer** | `trainer` | Admin console (courses, classes, assessments, assignments) minus admin-only routes |
-| **Hiring Manager** | `hiring_manager` | `/interviews`, `/hiring/reports`, `/analytics` |
+| **Hiring Manager** | `hiring_manager` | `/hiring/pipeline`, `/interviews`, `/hiring/reports`, `/analytics` |
 | **CEO** | `ceo` | Read-only executive view: `/`, `/analytics`, `/hiring/*`, `/interviews` |
 | **Admin** | `admin` | Full admin console including users, invites, settings, notifications |
-| **Candidate** | *(no auth)* | Public `/interview/$token` — magic-link interview test |
+| **External interviewee** | *(no auth)* | Public `/interview/$token` — magic-link interview test (pre-account tech rounds) |
 
 ### Core feature areas
 
@@ -55,29 +57,56 @@
 | **Courses & Classes** | Multi-step class creation wizard with AI syllabus assistant; sections with video/docs; bulk Excel import |
 | **Assessments** | MCQ + subjective test builder, templates, publish workflow, learner assignments & attempts |
 | **Interviews** | Schedule candidate sessions, magic-link delivery, AI evaluation, paper-only mode, HR notes, audit bundles |
+| **Hiring Pipeline** | End-to-end new-joiner journey: kanban board, stage progression, trial projects, CEO review/interview, convert to trainee |
+| **Onboarding (learner)** | Docs-style guides for core courses (AI Builder, Business Process) + department role tracks; auto-enrollment on hire |
 | **Hiring Reports** | Aggregated hiring metrics for managers/CEO |
 | **Admin** | User management, invite system, analytics dashboard, email templates/schedules, email testing |
 | **Notifications** | AWS SES transactional email with Postgres queue, cron-driven reminders/escalations |
 
+### Unified new-joiner journey (high level)
+
+```mermaid
+flowchart LR
+  subgraph preAuth [Pre_auth]
+    TechR1[Tech_Round_1_AI]
+    TechR2[Tech_Round_2_Domain]
+  end
+  subgraph trialPhase [Trial_candidate_role]
+    Trial[Trial_20hr]
+    CeoReview[CEO_Review]
+    CeoInterview[CEO_Interview]
+  end
+  subgraph postHire [Trainee_role]
+    Onboard[Onboarding_guides]
+    Complete[Pipeline_completed]
+  end
+  TechR1 --> TechR2 --> Trial --> CeoReview --> CeoInterview --> Onboard --> Complete
+```
+
+Full technical detail: [§23 Unified New Joiner & Hiring Pipeline](#23-unified-new-joiner--hiring-pipeline).
+
 ### Dual-surface architecture (admin vs user panel)
 
-The app is **one codebase, two shells** — not separate apps:
+The app is **one codebase, multiple shells** — not separate apps:
 
 | Surface | Layout | Route prefix | Primary personas |
 |---------|--------|--------------|------------------|
-| **Admin console** | `AdminLayout` (`components/admin/AdminLayout.tsx`) | `/`, `/courses`, `/assessments`, … | `admin`, `trainer`, `hiring_manager`, `ceo` |
-| **User / learner panel** | `LearnLayout` (`routes/learn.tsx`) | `/learn/*` | `trainee`; also trainers/admins in **student mode** |
-| **Candidate portal** | None (standalone page) | `/interview/$token` | External candidates (no auth) |
+| **Admin console** | `AdminLayout` (`components/admin/AdminLayout.tsx`) | `/`, `/courses`, `/hiring/pipeline`, … | `admin`, `trainer`, `hiring_manager`, `ceo` |
+| **Docs learner panel** | `DocsLearnLayout` inside `LearnLayout` (`routes/learn.tsx`) | `/learn/*` | `candidate`, `trainee`; staff in **student mode** |
+| **Interview portal** | None (standalone page) | `/interview/$token` | External candidates (no auth) |
 | **Test taking** | None (standalone page) | `/attempt/$assignmentId` | Learner taking an assigned assessment |
 
 **Integration glue:** `ViewModeProvider` (`lib/view-mode.tsx`) persists `creator` \| `student` in `localStorage` key `alyson-view-mode`. Both shells expose a mode toggle; switching to student mode navigates to `/learn`, and the learn footer links back to `/` (admin) when in creator mode.
 
 ### Post-auth routing
 
-- Trainee-only → `/learn`
+- `candidate`-only or `trainee`-only → `/learn/dashboard`
+- `hiring_manager`-only → `/interviews`
+- `ceo`-only → `/hiring/reports`
 - Everyone else with roles → `/` (admin dashboard)
 - No roles → `NoAccessPanel` (invite required)
 - Defined in `src/lib/auth-constants.ts` → `postAuthHomePath()`
+- Learner-only users (`isLearnerOnly()` in `role-access.ts`) are blocked from admin routes and redirected to `/learn/*`
 
 ---
 
@@ -116,6 +145,8 @@ The app is **one codebase, two shells** — not separate apps:
 Alyson-Training-Project/
 ├── context.md                 # This file
 ├── db/                        # SQL schemas (apply manually via npm scripts)
+│   ├── hiring-pipeline.sql    # Unified pipeline tables + candidate role
+│   └── onboarding-seeds.sql   # Core onboarding course seeds
 ├── docs/                      # AUTH, DEPLOYMENT, NEON_SETUP, AWS_SES_SETUP
 ├── infra/                     # EventBridge cron setup guide
 ├── scripts/                   # 33+ operational .mjs scripts
@@ -125,14 +156,18 @@ Alyson-Training-Project/
 │   ├── components/
 │   │   ├── admin/             # AdminLayout, AIClassAssistant, email editors, bulk import
 │   │   ├── auth/              # NoAccessPanel
+│   │   ├── hiring/            # PipelineBoard, pipeline UI
 │   │   ├── interview/         # InterviewExtendedPanels
+│   │   ├── learn/             # DocsLearnLayout (docs-style sidebar)
 │   │   ├── test-builder/      # TestBuilder, QuestionEditor, DifficultyChart
 │   │   └── ui/                # shadcn primitives (~30 components)
 │   ├── lib/                   # Business logic
 │   │   ├── ai/                # LLM calls, material extraction
 │   │   ├── email/             # SES, queue, cron, templates, triggers
+│   │   ├── hiring/            # Hiring reports
+│   │   ├── hiring-pipeline/   # Pipeline CRUD, stages, trial, CEO review, convert
 │   │   ├── interview/         # Sessions, evaluation, paper grading, audit
-│   │   └── hiring/            # Hiring reports
+│   │   └── onboarding/        # Onboarding nav + enrollment server fns
 │   ├── integrations/neon/     # Auth client, middleware, generated types
 │   ├── hooks/                 # use-mobile.tsx
 │   ├── assets/                # alyson-logo.svg
@@ -193,6 +228,8 @@ Routes are file-based under `src/routes/`. TanStack Router plugin generates `src
 | `/classes/new` | `classes.new.tsx` | Multi-step class creation wizard |
 | `/classes/$classId` | `classes.$classId.tsx` | Class editor (sections, assets) |
 | `/hiring/reports` | `hiring.reports.tsx` | Hiring reports |
+| `/hiring/pipeline` | `hiring.pipeline.index.tsx` | Hiring pipeline kanban + filters |
+| `/hiring/pipeline/$pipelineId` | `hiring.pipeline.$pipelineId.tsx` | Pipeline detail: schedule rounds, trial, CEO review, hire |
 | `/attempt/$assignmentId` | `attempt.$assignmentId.tsx` | Learner/admin test attempt |
 
 ### Nested layout routes (parent renders `<Outlet />`)
@@ -203,15 +240,19 @@ Routes are file-based under `src/routes/`. TanStack Router plugin generates `src
 | `/assessments` | `/assessments/`, `/assessments/builder`, `/assessments/templates`, `/assessments/$assessmentId/preview` |
 | `/interviews` | `/interviews/`, `/interviews/$sessionId` |
 | `/notifications` | `/notifications/`, `/notifications/templates`, `/notifications/schedules` |
-| `/learn` | `/learn/`, `/learn/courses`, `/learn/courses/$courseId/study` |
+| `/learn` | `/learn/`, `/learn/dashboard`, `/learn/guide/$courseId/$sectionId`, `/learn/assignments`, `/learn/trial`, `/learn/courses`, `/learn/courses/$courseId/study` |
 
-### User panel routes (LearnLayout — not AdminLayout)
+### User panel routes (LearnLayout + DocsLearnLayout — not AdminLayout)
 
 | Path | File | Purpose | Backend |
 |------|------|---------|---------|
-| `/learn` | `learn.index.tsx` | Assignment list (due date, status, start/continue) | `listMyAssignmentsFn` |
-| `/learn/courses` | `learn.courses.tsx` | Courses visible to learner's department | `listMyCoursesFn` |
-| `/learn/courses/$courseId/study` | `learn.courses.$courseId.study.tsx` | Card-based study flow (content + periodic quizzes) | `getCourseStudyCardsFn`, `recordStudyActivityFn` |
+| `/learn` | `learn.index.tsx` | Legacy assignment list (redirects or coexists with dashboard) | `listMyAssignmentsFn` |
+| `/learn/dashboard` | `learn.dashboard.tsx` | Onboarding hub — core guides + role tracks | `getOnboardingNavFn` |
+| `/learn/guide/$courseId/$sectionId` | `learn.guide.$courseId.$sectionId.tsx` | Docs-style guide reader | `getOnboardingNavFn`, section content |
+| `/learn/assignments` | `learn.assignments.tsx` | Assessment assignments | `listMyAssignmentsFn` |
+| `/learn/trial` | `learn.trial.tsx` | Trial project brief + submission (`candidate` only in nav) | `getMyTrialProjectFn`, `submitTrialProjectFn` |
+| `/learn/courses` | `learn.courses.tsx` | Legacy course catalog (department-scoped) | `listMyCoursesFn` |
+| `/learn/courses/$courseId/study` | `learn.courses.$courseId.study.tsx` | Legacy card-based study flow | `getCourseStudyCardsFn`, `recordStudyActivityFn` |
 
 **Standalone learner route (outside LearnLayout):**
 
@@ -222,9 +263,9 @@ Routes are file-based under `src/routes/`. TanStack Router plugin generates `src
 **Learn layout behavior** (`learn.tsx`):
 
 - Auth required; redirects to `/auth` if unauthenticated
-- `canAccessLearnRoute(roles)` — currently **any user with ≥1 workspace role** (not trainee-only)
-- Header nav: Assignments, Courses, Sign out
-- Footer: student/creator mode toggle + optional "Admin console" link
+- Wraps child routes in `DocsLearnLayout` — sidebar: Dashboard, guide tree (from onboarding nav), Assessments, Trial (when `isCandidateOnly`)
+- `canAccessLearnRoute(roles)` — any user with ≥1 workspace role; learner-only users blocked from admin via `isLearnerOnly()`
+- Header: logo + sign out; footer (non-learner-only): student/creator mode toggle + "Admin console" link
 
 ### API routes
 
@@ -249,7 +290,7 @@ Routes are file-based under `src/routes/`. TanStack Router plugin generates `src
 |--------|------|----------------|
 | **Root** | `__root.tsx` | HTML shell, QueryClient, ViewModeProvider, Toaster, 404/Error components |
 | **Admin** | `components/admin/AdminLayout.tsx` | Sidebar nav, auth redirect, role-based route guard, badges |
-| **Learn (user panel)** | `learn.tsx` | Minimal header/footer, assignments + courses nav, creator/student mode toggle |
+| **Learn (user panel)** | `learn.tsx` + `DocsLearnLayout` | Docs-style sidebar, dashboard/guides/trial/assignments, creator/student mode toggle |
 
 ### Navigation items
 
@@ -294,7 +335,7 @@ const fn = useServerFn(myFn);
 const result = await fn({ data: { ... } });
 ```
 
-### All `*.functions.ts` files (27)
+### All `*.functions.ts` files (29)
 
 | File | Domain |
 |------|--------|
@@ -311,6 +352,7 @@ const result = await fn({ data: { ... } });
 | `assignments.functions.ts` | Assignment management (16 functions) |
 | `attempt.functions.ts` | Test attempts |
 | `learn.functions.ts` | Learner course study |
+| `onboarding/onboarding.functions.ts` | Onboarding nav, guide content |
 | `invites.functions.ts` | Invite CRUD (8 functions) |
 | `users-metrics.functions.ts` | User metrics |
 | `nav.functions.ts` | Nav badge counts |
@@ -325,10 +367,13 @@ const result = await fn({ data: { ... } });
 | `email/triggers.functions.ts` | Manual trigger runs |
 | `interview/interview.functions.ts` | Interview system (27 functions) |
 | `hiring/hiring-reports.functions.ts` | Hiring reports |
+| `hiring-pipeline/hiring-pipeline.functions.ts` | Hiring pipeline (create, list, stages, trial, CEO review, convert) |
 
-### All `*.server.ts` files (38)
+### All `*.server.ts` files (40)
 
-`auth-bootstrap.server.ts`, `auth-token.server.ts`, `pg.server.ts`, `config.server.ts`, `content-manager.server.ts`, `classes.server.ts`, `class-create.server.ts`, `class-bulk-import.server.ts`, `assessments.server.ts`, `assignments.server.ts`, `invites.server.ts`, `dashboard-metrics.server.ts`, `asset-storage.server.ts`, `asset-auth.server.ts`, `asset-signing.server.ts`, `sns-verify.server.ts`, `cron-auth.server.ts`, `ai/extract-material.server.ts`, `ai/section-material.server.ts`, `email/email-db.server.ts`, `email/email-settings.server.ts`, `email/email-metrics.server.ts`, `email/cron-runner.server.ts`, `email/triggers.server.ts`, `email/assignment-notify.server.ts`, `email/queue-process.server.ts`, `hiring/hiring-reports.server.ts`, `interview/interview.server.ts`, `interview/interview-token.server.ts`, `interview/interview-email.server.ts`, `interview/interview-audit.server.ts`, `interview/interview-parse.server.ts`, `interview/assessment-version.server.ts`, `interview/ai-evaluate.server.ts`, `interview/profile-evaluate.server.ts`, `interview/paper-grade.server.ts`, `interview/paper-only-evaluate.server.ts`, `interview/evaluation-audit.server.ts`
+`auth-bootstrap.server.ts`, `auth-token.server.ts`, `pg.server.ts`, `config.server.ts`, `content-manager.server.ts`, `classes.server.ts`, `class-create.server.ts`, `class-bulk-import.server.ts`, `assessments.server.ts`, `assignments.server.ts`, `invites.server.ts`, `dashboard-metrics.server.ts`, `asset-storage.server.ts`, `asset-auth.server.ts`, `asset-signing.server.ts`, `sns-verify.server.ts`, `cron-auth.server.ts`, `ai/extract-material.server.ts`, `ai/section-material.server.ts`, `email/email-db.server.ts`, `email/email-settings.server.ts`, `email/email-metrics.server.ts`, `email/cron-runner.server.ts`, `email/triggers.server.ts`, `email/assignment-notify.server.ts`, `email/queue-process.server.ts`, `hiring/hiring-reports.server.ts`, `hiring-pipeline/hiring-pipeline.server.ts`, `onboarding/onboarding-nav.server.ts`, `interview/interview.server.ts`, `interview/interview-token.server.ts`, `interview/interview-email.server.ts`, `interview/interview-audit.server.ts`, `interview/interview-parse.server.ts`, `interview/assessment-version.server.ts`, `interview/ai-evaluate.server.ts`, `interview/profile-evaluate.server.ts`, `interview/paper-grade.server.ts`, `interview/paper-only-evaluate.server.ts`, `interview/evaluation-audit.server.ts`
+
+**Pipeline note:** Hiring pipeline CRUD uses **direct `pg` pool** in `hiring-pipeline.server.ts` (system/admin actor pattern), same as interviews — not the Neon Data API client from `requireDbAuth` context.
 
 ### Auth token flow
 
@@ -368,29 +413,49 @@ Sign in at /auth
       1. Upsert profiles row
       2. If existing roles → return them
       3. Else consume invite (by token from localStorage or email match)
-      4. Else if email in BOOTSTRAP_ADMIN_EMAILS → grant admin + trainer
-      5. Else → no roles → NoAccessPanel
+      4. If invite role is candidate or trainee → linkPipelineOnBootstrap()
+         (links hiring_pipelines.user_id, sets department, auto_enroll_onboarding())
+      5. Else if email in BOOTSTRAP_ADMIN_EMAILS → grant admin + trainer
+      6. Else → no roles → NoAccessPanel
   → fetchMyRoles() fallback if bootstrap returns empty
+```
+
+```mermaid
+sequenceDiagram
+  participant HR
+  participant Pipeline as hiring_pipelines
+  participant Invite
+  participant Auth as Neon_Auth
+  participant Learn as learn_routes
+  HR->>Pipeline: create pipeline advance stages
+  HR->>Invite: invite with pipeline_id role candidate
+  Invite->>Auth: candidate signs up cintara.ai
+  Auth->>Pipeline: linkPipelineOnBootstrap
+  Auth->>Learn: auto_enroll_onboarding
+  Learn->>Learn: dashboard plus trial plus guides
 ```
 
 ### Invite system
 
-- Admin creates invites at `/invites`
+- Admin creates invites at `/invites`; pipeline detail can also send candidate invite via `sendCandidateInviteFn`
 - Invite token stored in `localStorage` key `alyson_invite_token` during signup flow
-- Invites table: `invites` (email, role, department, token, accepted_at)
+- Invites table: `invites` (email, role, department, token, `pipeline_id`, accepted_at)
 - Server: `invites.server.ts`, `invites.functions.ts`
 
 ### Workspace roles
 
-Enum `app_role` in Postgres: `admin`, `trainer`, `trainee`, `hiring_manager`, `ceo`
+Enum `app_role` in Postgres: `admin`, `trainer`, `trainee`, `hiring_manager`, `ceo`, `candidate`
 
 | Role | UI label | Access pattern |
 |------|----------|----------------|
 | `admin` | Admin | All routes |
 | `trainer` | Creator | All except admin-only prefixes |
-| `trainee` | Student | `/learn` only |
+| `trainee` | Student | `/learn/*` only (`isLearnerOnly`) |
+| `candidate` | Trial candidate | `/learn/*` only (`isLearnerOnly`); provisional during trial/onboarding |
 | `hiring_manager` | Hiring Manager | If no trainer: interviews + hiring + analytics only |
 | `ceo` | CEO | If no admin/trainer/hiring_manager: `/`, `/analytics`, `/hiring/*`, `/interviews` |
+
+**Learner-only helpers** (`role-access.ts`): `isCandidateOnly()`, `isTraineeOnly()`, `isLearnerOnly()` — users with only `candidate` and/or `trainee` roles are redirected away from admin routes to `/learn/*`.
 
 ### Admin-only route prefixes
 
@@ -448,28 +513,59 @@ npm run db:apply                  # db/neon-schema.sql
 npm run db:apply-interview        # db/interview-sessions.sql
 npm run db:apply-enterprise       # db/enterprise-assessment.sql
 npm run db:apply-paper-only       # db/paper-only-assessment.sql
+npm run db:apply-pipeline         # db/hiring-pipeline.sql
+npm run db:apply-onboarding-seeds # db/onboarding-seeds.sql (core onboarding courses)
 npm run db:apply-rls              # db/neon-rls-policies.sql
 npm run db:apply-email-seeds      # scripts/apply-email-seeds.mjs
 npm run db:apply-email-queue-fix  # db/fix-email-queue-functions.sql
 ```
 
+**Note:** `scripts/db-apply-all.mjs` does **not** yet include `db:apply-pipeline` or `db:apply-onboarding-seeds` — apply those manually on fresh Neon projects.
+
 Schema is **not auto-versioned** — track applied scripts in a runbook.
 
 ### Tables
 
-**Profiles & access:** `profiles`, `user_roles`, `departments`, `invites`
+**Profiles & access:** `profiles`, `user_roles`, `departments`, `invites` (includes `pipeline_id`)
 
-**Content:** `courses`, `course_departments`, `classes`, `sections`, `section_assets`, `section_questions`, `section_progress`, `ai_class_generation`
+**Content:** `courses` (includes `is_core_onboarding`), `course_departments`, `classes`, `sections`, `section_assets`, `section_questions`, `section_progress`, `ai_class_generation`
 
 **Assessments:** `assessments`, `assessment_questions`, `assessment_templates`, `assessment_versions`, `assessment_version_questions`
 
 **Learners:** `candidates`, `assessment_assignments`, `assessment_attempts`, `attempt_answers`, `question_flags`, `study_activity`
 
-**Interviews:** `interview_sessions`, `interview_evaluation_runs`, `interview_hr_notes`, `interview_question_flags`, `interview_supporting_scores`
+**Hiring pipeline:** `hiring_pipelines`, `pipeline_stages`, `trial_projects`, `onboarding_enrollments`
+
+**Interviews:** `interview_sessions` (includes `pipeline_id`, `round_type`), `interview_evaluation_runs`, `interview_hr_notes`, `interview_question_flags`, `interview_supporting_scores`
 
 **Email:** `email_templates`, `email_template_versions`, `notification_log`, `notification_schedules`, `email_send_log`, `email_send_state`, `suppressed_emails`, `email_unsubscribe_tokens`, `email_notifications`, `email_queue`
 
 **Views (hide answers from learners):** `section_questions_safe`, `assessment_questions_safe`
+
+### Pipeline stage keys vs UI labels
+
+Defined in `src/lib/hiring-pipeline/hiring-pipeline.shared.ts`:
+
+| DB key | UI label |
+|--------|----------|
+| `tech_round_1` | Tech Round 1 (AI) |
+| `tech_round_2` | Tech Round 2 (Domain) |
+| `trial_project` | Trial Project (~20hr) |
+| `bill_review` | **CEO Review** (DB columns remain `bill_review_*`) |
+| `ceo_interview` | CEO Interview |
+| `onboarding` | Onboarding |
+| `completed` | Completed |
+
+Interview `round_type` values: `tech_round_1`, `tech_round_2`, `ceo_interview`.
+
+### Onboarding seed courses
+
+From `db/onboarding-seeds.sql` — courses with `is_core_onboarding = true`:
+
+- "How to be an AI Builder"
+- "Business Process"
+
+Department role tracks use `course_departments` + `HIRING_ROLE_TO_DEPARTMENT` in `src/lib/departments.ts`.
 
 ### Seeded departments (hardcoded in SQL)
 
@@ -481,9 +577,14 @@ Schema is **not auto-versioned** — track applied scripts in a runbook.
 | `engineer` | Engineer |
 | `analyst` | Analyst |
 | `affiliate` | Affiliate |
+| `affiliate_manager` | Affiliate Manager |
+| `data_architect` | Data Architect |
+| `data_engineer` | Data Engineer |
 | `hr` | HR |
 | `operations` | Operations |
 | `sales` | Sales |
+
+Canonical labels also in `src/lib/departments.ts` → `DEPARTMENTS` and `HIRING_ROLE_TO_DEPARTMENT` (maps pipeline `target_role` to department for onboarding tracks).
 
 ### Schema defaults (hardcoded in SQL)
 
@@ -697,14 +798,29 @@ Multi-step flow:
 
 ### Learner / user panel experience (`/learn`)
 
-- Layout: `learn.tsx` — **minimal shell** compared to `AdminLayout` (no sidebar, no search, no notification bell)
+**Two learn experiences coexist:**
+
+| Experience | Routes | Status |
+|------------|--------|--------|
+| **Docs-style onboarding** (primary for new joiners) | `/learn/dashboard`, `/learn/guide/$courseId/$sectionId`, `/learn/assignments`, `/learn/trial` | **Implemented** — `DocsLearnLayout` sidebar |
+| **Legacy card study** | `/learn/courses`, `/learn/courses/$courseId/study`, `/learn` index | Still present; department-scoped catalog + swipeable cards |
+
+**Docs onboarding flow:**
+
+- Layout: `learn.tsx` wraps routes in `DocsLearnLayout` (`components/learn/DocsLearnLayout.tsx`)
+- **Dashboard** (`learn.dashboard.tsx`): hub for core onboarding courses + department role tracks
+- **Guide reader** (`learn.guide.$courseId.$sectionId.tsx`): section-by-section docs-style content
+- **Onboarding nav** built server-side in `onboarding-nav.server.ts` via `getOnboardingNavFn` — core guides (`courses.is_core_onboarding`) + department tracks from `HIRING_ROLE_TO_DEPARTMENT`
+- **Trial** (`learn.trial.tsx`): trial project brief + submission; nav link shown only for `isCandidateOnly` roles; backed by `trial_projects` + `getMyTrialProjectFn` / `submitTrialProjectFn`
+- **Assignments** (`learn.assignments.tsx`): assessment list; CTA links to `/attempt/$assignmentId`
 - View mode stored in `localStorage` key `alyson-view-mode`; synced with admin sidebar toggle
-- **Assignments:** pulled from `assessment_assignments` where `learner_user_id = current user`; CTA links to `/attempt/$assignmentId`
-- **Courses:** scoped by `profiles.department` → `course_departments` join (not per-user course enrollment)
-- **Study flow:** flattens published classes → sections into swipeable cards; inserts quiz cards every 7 content cards from `section_questions_safe`
-- **Progress:** writes `study_activity` rows on card advance; `section_progress` table exists in schema but is **not written** by current learn code
+
+**Legacy study flow gaps** (apply to `/learn/courses/.../study` only):
+
+- **Study cards:** text-only; no `section_assets` (video/PDF) playback
+- **Quizzes:** display-only; no answer capture or grading
+- **Progress:** writes `study_activity` on card advance; `section_progress` table exists but is **not written**
 - **Progress %:** heuristic in `listMyCoursesFn` — `study_activity` count ÷ `(published_class_count × 3)`, capped at 100%
-- **Missing from study UI:** section videos/documents (`section_assets`), interactive quiz answering, class-level navigation, resume-last-position
 
 ### Dashboard (`/`)
 
@@ -829,6 +945,17 @@ Public, no auth required. Functions:
 - `hiring-reports.server.ts` / `hiring-reports.functions.ts`
 - Auth: `hiring_manager`, `admin`, or `ceo`
 
+### Pipeline integration
+
+The unified hiring pipeline ([§23](#23-unified-new-joiner--hiring-pipeline)) links interviews to a single `hiring_pipelines` record per person:
+
+- **Schedule from pipeline detail:** `schedulePipelineRoundFn` → `schedulePipelineInterviewInDb()` creates `interview_sessions` with `pipeline_id` and `round_type` (`tech_round_1`, `tech_round_2`, `ceo_interview`), snapshots assessment version, sends magic-link email (unless paper-only)
+- **Stage advancement:** `passPipelineStageFn` marks a stage passed and advances `current_stage`; HR can also record CEO Review via `recordCeoReviewFn` (UI label "CEO Review"; DB columns `bill_review_*`)
+- **Trial → account:** `sendCandidateInviteFn` creates invite with `pipeline_id` and `candidate` role; on bootstrap, `linkPipelineOnBootstrap()` links `user_id` and runs `auto_enroll_onboarding()`
+- **Hire:** `convertToTraineeFn` upgrades role to `trainee`, advances pipeline to onboarding/completed
+
+Standalone `/interviews` scheduling (without pipeline) still works for ad-hoc sessions.
+
 ### All interview server functions (27)
 
 `createInterviewSessionFn`, `listInterviewSessionsFn`, `listInterviewAssessmentsFn`, `getInterviewSessionDetailFn`, `generateInterviewProfileFn`, `getInterviewSubmissionRecordFn`, `openInterviewSessionFn`, `resendInterviewInviteFn`, `cancelInterviewSessionFn`, `updateInterviewProctorNotesFn`, `appendInterviewHrNoteFn`, `flagInterviewQuestionFn`, `addInterviewSupportingScoreFn`, `getInterviewAuditBundleFn`, `refreshInterviewAssessmentVersionFn`, `rerunInterviewEvaluationFn`, `updateInPersonFlowFn`, `registerPaperUploadFn`, `removePaperUploadFn`, `gradePaperAssessmentFn`, `getInterviewSessionByTokenFn`, `confirmInterviewIdentityFn`, `startInterviewAttemptFn`, `getInterviewQuestionsFn`, `saveInterviewDraftAnswersFn`, `logInterviewEventFn`, `submitInterviewAttemptFn`
@@ -891,6 +1018,8 @@ Copy `.env.example` to `.env` for local dev. **Never commit `.env`.**
 | `npm run db:apply-interview` | Apply interview schema |
 | `npm run db:apply-enterprise` | Apply enterprise/hiring schema |
 | `npm run db:apply-paper-only` | Apply paper-only mode column |
+| `npm run db:apply-pipeline` | Apply hiring pipeline schema (`db/hiring-pipeline.sql`) |
+| `npm run db:apply-onboarding-seeds` | Seed core onboarding courses (`db/onboarding-seeds.sql`) |
 | `npm run db:apply-rls` | Apply RLS policies |
 | `npm run db:apply-email-seeds` | Seed email templates |
 | `npm run db:apply-email-queue-fix` | Fix email queue functions |
@@ -921,7 +1050,7 @@ CMD: npm run start
 
 ```bash
 npm install
-# Apply all DB schemas (see section 8)
+# Apply all DB schemas (see section 8) — include db:apply-pipeline and db:apply-onboarding-seeds
 npm run auth:verify-env
 npm run email:verify-aws
 node scripts/audit-schema.mjs
@@ -1010,6 +1139,11 @@ Semantic versioning in `package.json`. Database schema tracked manually in runbo
 | Email templates admin | `notifications.templates.tsx` |
 | Local asset storage + signed URLs | `asset-storage.server.ts`, `asset-signing.server.ts` |
 | Hiring reports | `hiring.reports.tsx` |
+| Hiring pipeline (kanban + detail) | `hiring.pipeline.*.tsx`, `hiring-pipeline.server.ts` |
+| Candidate role + pipeline bootstrap | `auth-bootstrap.server.ts`, `hiring-pipeline.server.ts` |
+| Docs-style learn dashboard / guides / trial | `DocsLearnLayout.tsx`, `learn.dashboard.tsx`, `learn.guide.*.tsx`, `learn.trial.tsx` |
+| Onboarding auto-enrollment | `onboarding-nav.server.ts`, `db/onboarding-seeds.sql` |
+| Users page pipeline stage badge | `users.tsx`, `STAGE_LABELS` in `hiring-pipeline.shared.ts` |
 | Analytics dashboard | `analytics.tsx` |
 | Docker deployment | `Dockerfile`, `docs/DEPLOYMENT.md` |
 | Production config validation | `assertProductionConfig()`, `validate-deploy.mjs` |
@@ -1030,13 +1164,18 @@ Semantic versioning in `package.json`. Database schema tracked manually in runbo
 | **pg_cron** | Not available on Neon | External HTTP cron required |
 | **Admin search bar** | UI present in `AdminLayout` but no search logic wired | `AdminLayout.tsx` line ~214 |
 | **Bell notification icon** | Rendered in header, no notification system behind it | `AdminLayout.tsx` |
-| **User panel study assets** | Study cards use section text only; no video/PDF playback | `learn.courses.$courseId.study.tsx` |
-| **User panel quiz interaction** | Quiz cards display options but do not capture or grade answers | `learn.courses.$courseId.study.tsx` |
-| **`section_progress` unused** | Table + RLS exist; learn flow only writes `study_activity` | `learn.functions.ts` vs `neon-schema.sql` |
+| **User panel study assets** | Legacy study cards use section text only; no video/PDF playback | `learn.courses.$courseId.study.tsx` |
+| **User panel quiz interaction** | Legacy quiz cards display options but do not capture or grade answers | `learn.courses.$courseId.study.tsx` |
+| **`section_progress` unused** | Table + RLS exist; legacy learn flow only writes `study_activity` | `learn.functions.ts` vs `neon-schema.sql` |
 | **Attempt page layout** | `/attempt/*` is standalone — no LearnLayout chrome or breadcrumbs | `attempt.$assignmentId.tsx` |
-| **Course access model** | Department-wide course visibility, not individual enrollment | `listMyCoursesFn` |
-| **No `components/learn/`** | User panel UI lives inline in route files | `src/routes/learn*.tsx` |
+| **Course access model** | Department-wide course visibility, not individual enrollment (onboarding uses `onboarding_enrollments`) | `listMyCoursesFn`, `onboarding-nav.server.ts` |
 | **Dual-role UX** | Trainer/admin can access `/learn` but post-auth still lands on `/` | `postAuthHomePath()`, `canAccessLearnRoute()` |
+| **Pipeline RLS** | New pipeline tables lack RLS policies in `neon-rls-policies.sql` | `db/hiring-pipeline.sql` |
+| **Pipeline types** | `integrations/neon/types.ts` not updated for pipeline tables | `integrations/neon/types.ts` |
+| **Pipeline funnel metrics** | Dashboard / hiring reports not extended with pipeline stage funnel | `dashboard-metrics.server.ts`, `hiring-reports.server.ts` |
+| **Trial/onboarding emails** | No dedicated notification emails for trial milestones or onboarding | email system |
+| **`db-apply-all.mjs` gap** | Does not run pipeline or onboarding seed scripts | `scripts/db-apply-all.mjs` |
+| **Deferred pipeline tables** | `learning_paths`, `learner_path_assignments`, `policy_documents`, `pipeline_events` not created | phased plan |
 
 ### No TODO/FIXME/HACK comments
 
@@ -1074,7 +1213,10 @@ When planning changes with an LLM, provide this context plus specifics about:
 - [ ] Does it upload **files**? Use asset buckets + `asset-storage.server.ts` (local disk).
 - [ ] New **route**? Add file in `src/routes/` — `routeTree.gen.ts` regenerates automatically.
 - [ ] New **env var**? Add to `.env.example`, `config.server.ts`, `assertProductionConfig()`, and `validate-deploy.mjs`.
-- [ ] **User panel work?** Read [§22 User Panel Planning Guide](#22-user-panel--planning-guide) first — decide shell, route nesting, and data ownership before adding UI.
+- [ ] **User panel work?** Read [§22 User Panel Planning Guide](#22-user-panel--planning-guide) and [§23 Unified New Joiner & Hiring Pipeline](#23-unified-new-joiner--hiring-pipeline) for onboarding/hiring context.
+- [ ] **Pipeline work?** Stage keys in `hiring-pipeline.shared.ts`; DB ops in `hiring-pipeline.server.ts` via `pg` pool; UI in `hiring.pipeline.*.tsx`.
+- [ ] **Candidate/trainee learn work?** `DocsLearnLayout`, `onboarding-nav.server.ts`, `courses.is_core_onboarding`.
+- [ ] **CEO Review naming:** UI says "CEO Review"; DB/API may still use `bill_review` / `recordCeoReview*`.
 
 ### Critical files to read first
 
@@ -1092,8 +1234,12 @@ When planning changes with an LLM, provide this context plus specifics about:
 | Production config | `src/lib/config.server.ts` |
 | Neon browser client | `src/integrations/neon/client.ts` |
 | Admin shell | `src/components/admin/AdminLayout.tsx` |
-| User panel shell | `src/routes/learn.tsx` |
+| User panel shell | `src/routes/learn.tsx`, `src/components/learn/DocsLearnLayout.tsx` |
 | Learner server fns | `src/lib/learn.functions.ts`, `src/lib/learn-api.ts` |
+| Onboarding | `src/lib/onboarding/onboarding.functions.ts`, `onboarding-nav.server.ts` |
+| Hiring pipeline | `src/lib/hiring-pipeline/hiring-pipeline.shared.ts`, `hiring-pipeline.server.ts`, `hiring-pipeline.functions.ts` |
+| Pipeline admin UI | `src/routes/hiring.pipeline.*.tsx`, `src/components/hiring/PipelineBoard.tsx` |
+| Pipeline SQL | `db/hiring-pipeline.sql`, `db/onboarding-seeds.sql` |
 | Test attempts | `src/routes/attempt.$assignmentId.tsx`, `src/lib/attempt.functions.ts` |
 | View mode toggle | `src/lib/view-mode.tsx` |
 | Core schema | `db/neon-schema.sql` |
@@ -1127,16 +1273,20 @@ When planning changes with an LLM, provide this context plus specifics about:
 
 | Area | Status | Notes |
 |------|--------|-------|
-| Auth & roles | **Working** | Same Neon Auth session; `trainee` role gates admin via `isTraineeOnly()` |
+| Auth & roles | **Working** | `candidate` + `trainee` are learner-only via `isLearnerOnly()`; post-auth → `/learn/dashboard` |
+| Docs onboarding UI | **Working** | `DocsLearnLayout` — dashboard, guide tree, assignments, trial (candidates) |
+| Pipeline → candidate invite | **Working** | `sendCandidateInviteFn` + bootstrap `linkPipelineOnBootstrap()` + `auto_enroll_onboarding()` |
 | Admin → learner assignment | **Working** | `/assignments` creates `assessment_assignments`; emails include `{retake_link}` |
-| Learner assignment list | **MVP** | `/learn` — status badges, start/continue, overdue indicator |
+| Learner assignments | **Working** | `/learn/assignments` — status badges, start/continue, overdue indicator |
 | Test taking | **Working** | `/attempt/$assignmentId` — MCQ auto-grade, subjective storage, attempt limits |
-| Course catalog (learner) | **MVP** | Department-scoped list with rough progress % |
-| Study experience | **Early MVP** | Text-only cards; no media; quizzes are display-only |
-| Admin ↔ learner navigation | **Partial** | Mode toggle + footer link; no unified nav branding |
+| Legacy course catalog | **MVP** | `/learn/courses` — department-scoped list with rough progress % |
+| Legacy study experience | **Early MVP** | `/learn/courses/.../study` — text-only cards; no media; quizzes display-only |
+| Admin ↔ learner navigation | **Partial** | Mode toggle + footer link; docs sidebar distinct from admin chrome |
 | Learner notifications | **Email only** | SES reminders/escalations; no in-app notification center |
 | Learner profile / settings | **Missing** | No `/learn/profile` or preferences |
 | Certificates / completion | **Missing** | Pass status on assignment only |
+
+See also [§23](#23-unified-new-joiner--hiring-pipeline) for the full new-joiner journey.
 
 ### 22.2 How admin and user panel connect today
 
@@ -1148,25 +1298,27 @@ When planning changes with an LLM, provide this context plus specifics about:
          │                                    │
          ▼                                    ▼
 ┌─────────────────────┐              ┌─────────────────────┐
-│   Admin console     │              │   User panel        │
-│   AdminLayout       │   toggle     │   LearnLayout       │
-│   /  /courses  …    │◄────────────►│   /learn/*          │
+│   Admin console     │              │   Docs learner      │
+│   AdminLayout       │   toggle     │   DocsLearnLayout   │
+│   /hiring/pipeline  │◄────────────►│   /learn/*          │
 └─────────────────────┘  view-mode   └─────────────────────┘
          │                                    │
-         │ creates                            │ consumes
+         │ pipeline + invites                 │ consumes
          ▼                                    ▼
-  courses, classes, sections          listMyCoursesFn (dept scope)
-  assessments, templates              listMyAssignmentsFn (user scope)
+  hiring_pipelines ──invite──► candidate role bootstrap
+  trial_projects, onboarding_enrollments      getOnboardingNavFn
+  courses, classes, sections          learn.guide / dashboard / trial
   assessment_assignments ───────────► /attempt/$assignmentId
-  study content (sections, assets) ──► getCourseStudyCardsFn (text only today)
 ```
 
 **Key integration files:**
 
 | Concern | Admin side | User panel side |
 |---------|------------|-----------------|
-| Assign tests | `routes/assignments.tsx`, `assignments.functions.ts` | `learn.index.tsx`, `learn.functions.ts` |
-| Publish content | `classes.$classId.tsx`, `courses.$courseId.tsx` | `learn.courses.$courseId.study.tsx` |
+| Hiring pipeline | `hiring.pipeline.*.tsx`, `hiring-pipeline.functions.ts` | `learn.trial.tsx`, bootstrap link |
+| Onboarding content | `/courses`, `onboarding-seeds.sql` | `learn.dashboard.tsx`, `learn.guide.*.tsx` |
+| Assign tests | `routes/assignments.tsx`, `assignments.functions.ts` | `learn.assignments.tsx`, `learn.functions.ts` |
+| Publish content | `classes.$classId.tsx`, `courses.$courseId.tsx` | `learn.guide.*.tsx` (guides); legacy `learn.courses.$courseId.study.tsx` |
 | Role routing | `AdminLayout.tsx`, `role-access.ts` | `learn.tsx`, `postAuthHomePath()` |
 | Mode switch | `AdminLayout` footer button | `learn.tsx` footer button |
 | Analytics | `analytics.tsx`, `dashboard-metrics.server.ts` | `study_activity` feeds admin metrics |
@@ -1175,71 +1327,63 @@ When planning changes with an LLM, provide this context plus specifics about:
 
 | Entity | Admin creates/edits | Learner reads | Access rule today |
 |--------|---------------------|---------------|-------------------|
-| `courses` | `/courses` | `/learn/courses` | Via `profiles.department` → `course_departments` |
-| `classes` / `sections` | `/classes/*` | Study cards | Only `status = 'published'` classes |
-| `section_assets` | Class editor uploads | **Not surfaced** | Videos/docs exist in DB but study UI ignores them |
-| `section_questions` | Section editor / AI gen | Quiz cards (read-only) | `section_questions_safe` view hides answers |
-| `assessment_assignments` | `/assignments` | `/learn` list | `learner_user_id = auth user` |
-| `assessment_attempts` | Admin can view via assignments | `/attempt/*` | Ownership check in `attempt.functions.ts` |
-| `study_activity` | — (learner-generated) | Drives progress % | Per-user inserts on card advance |
-| `section_progress` | — | **Unused** | Schema ready; no server fn writes yet |
+| `hiring_pipelines` | `/hiring/pipeline` | Linked via `user_id` after invite | HR content managers only (admin UI) |
+| `trial_projects` | Pipeline detail | `/learn/trial` | `getTrialProjectForUserInDb(userId)` |
+| `onboarding_enrollments` | Auto on bootstrap / convert | Dashboard + guide nav | Per-user rows |
+| `courses` (`is_core_onboarding`) | `/courses` + seeds | `/learn/dashboard`, guides | Core for all; dept tracks via `course_departments` |
+| `classes` / `sections` | `/classes/*` | Guide reader + legacy study cards | Published classes only |
+| `section_assets` | Class editor uploads | **Not in legacy study** | Videos/docs exist in DB |
+| `assessment_assignments` | `/assignments` | `/learn/assignments` | `learner_user_id = auth user` |
+| `study_activity` | — | Legacy progress % | Per-user inserts on card advance |
 
-**Planning decision:** Keep department-based course visibility, or add per-user / per-assignment course enrollment? Current code assumes **department-wide** access.
+**Planning decision:** Onboarding uses per-user `onboarding_enrollments`; legacy catalog still uses department-wide `course_departments`.
 
-### 22.4 Route & layout planning options
-
-When expanding the user panel, pick a layout strategy:
-
-| Option | Pros | Cons |
-|--------|------|------|
-| **A. Extend LearnLayout** (recommended baseline) | Matches existing patterns; trainee-only users already here | Must nest new routes under `/learn` |
-| **B. Nest `/attempt` under `/learn`** | Unified chrome, breadcrumbs, consistent sign-out | Breaking change for email `{retake_link}` URLs unless redirects added |
-| **C. Extract `UserLayout` component** | Shared header/sidebar for `/learn` + `/attempt` | New `src/components/learn/` folder; refactor route files |
-| **D. Separate subdomain/app** | Hard isolation | Duplicates auth, deployment, and shared lib — **not aligned with current repo** |
-
-**Suggested route tree (target):**
+### 22.4 Route tree (implemented)
 
 ```
-/learn                          → dashboard (assignments summary + continue studying)
-/learn/assignments              → (optional) dedicated assignments view (today = /learn index)
-/learn/courses                  → course catalog
-/learn/courses/$courseId        → (new) course detail — class list, progress per class
-/learn/courses/$courseId/study  → study flow (enhance with assets + real quizzes)
-/learn/courses/$courseId/classes/$classId → (new) single-class deep dive
-/learn/attempts/$assignmentId   → (optional) move from /attempt with redirect
-/learn/profile                  → (new) display name, department, notification prefs
+/learn/dashboard                          → onboarding hub (core + role tracks)
+/learn/guide/$courseId/$sectionId         → docs-style guide reader
+/learn/assignments                        → assessment list
+/learn/trial                              → trial project (candidates)
+/learn/courses                            → legacy catalog
+/learn/courses/$courseId/study            → legacy card study flow
+/learn                                    → legacy index (assignments)
+/attempt/$assignmentId                    → standalone test UI (outside LearnLayout)
 ```
 
-### 22.5 Feature backlog — prioritized for planning
+### 22.5 Historical planning notes (partially superseded)
 
-#### P0 — Core integration (make admin content usable in user panel)
+The items below were written before the docs onboarding UI shipped. **Implemented:** `src/components/learn/DocsLearnLayout.tsx`, `/learn/dashboard`, `/learn/guide/*`, `/learn/assignments`, `/learn/trial`.
 
-- [ ] **Surface `section_assets`** in study flow — video player (`SignedAssetImage` / signed URLs), document links
+**Still open** from original backlog:
+
+#### P0 — Core integration (legacy study + attempts)
+
+- [ ] **Surface `section_assets`** in legacy study flow — video player, document links
 - [ ] **Wire `section_progress`** — mark sections complete; replace heuristic progress %
 - [ ] **Nest or wrap `/attempt`** in learner chrome; preserve old URL with redirect for email links
-- [ ] **Extract shared components** → `src/components/learn/` (AssignmentCard, CourseCard, StudyCard, LearnerHeader)
+- [ ] **Extract more shared components** → `AssignmentCard`, `CourseCard`, `StudyCard` (layout shell exists)
 
-#### P1 — Learner UX parity
+#### P1 — Learner UX parity (legacy paths)
 
-- [ ] **Interactive section quizzes** — capture answers, optional lightweight grading (no pass/fail gate)
-- [ ] **Resume study position** — store `last_card_key` or last `section_id` per user/course
+- [ ] **Interactive section quizzes** in legacy study flow
+- [ ] **Resume study position** — store last `section_id` per user/course
 - [ ] **Class-level navigation** — browse classes before linear card flow
-- [ ] **Assignment detail page** — history of attempts, scores, feedback before retake
-- [ ] **Empty states** — link learners to contact admin / check department assignment
+- [ ] **Assignment detail page** — attempt history before retake
+- [ ] **Empty states** — link learners to contact admin
 
 #### P2 — Cross-surface features
 
-- [ ] **In-app notifications** — reuse admin bell pattern; learner-specific events (new assignment, due soon)
-- [ ] **Learner profile** — read-only department; editable display name if allowed
-- [ ] **Admin preview as learner** — trainer opens `/learn/courses/$id/study` in student mode (already possible via toggle)
-- [ ] **Deep links from admin** — "View as learner" on assignment row, course row
+- [ ] **In-app notifications** — learner-specific events
+- [ ] **Learner profile** — display name, notification prefs
+- [ ] **Admin preview as learner** — student mode toggle (already possible)
+- [ ] **Deep links from admin** — "View as learner" on rows
 
 #### P3 — Nice-to-have
 
-- [ ] Certificates / completion badges on course pass
-- [ ] Learner search across courses and assignments
-- [ ] Mobile-first study mode polish
-- [ ] Offline draft answers for attempts (interview has `interview-draft.shared.ts` pattern)
+- [ ] Certificates / completion badges
+- [ ] Learner search (sidebar placeholder exists; not wired)
+- [ ] Mobile-first study polish
 
 ### 22.6 Server function conventions for user panel work
 
@@ -1269,11 +1413,12 @@ export const myLearnerFn = createServerFn({ method: "POST" })
 
 | Role | `/learn` access | Admin access | Mode toggle | Post-auth home |
 |------|-----------------|--------------|-------------|----------------|
-| `trainee` only | Yes (only surface) | Blocked → redirect `/learn` | Hidden / forced student | `/learn` |
+| `candidate` only | Yes (only surface) | Blocked → redirect `/learn` | Hidden / forced student | `/learn/dashboard` |
+| `trainee` only | Yes (only surface) | Blocked → redirect `/learn` | Hidden / forced student | `/learn/dashboard` |
 | `trainer` | Yes (via toggle) | Yes (creator routes) | Yes | `/` |
 | `admin` | Yes (via toggle) | Full | Yes | `/` |
-| `hiring_manager` | Yes (`canAccessLearnRoute` = any role) | Hiring routes | Yes | `/` |
-| `ceo` | Yes | Read-only admin | Yes | `/` |
+| `hiring_manager` | Yes (`canAccessLearnRoute` = any role) | Hiring routes | Yes | `/interviews` if sole role |
+| `ceo` | Yes | Read-only admin | Yes | `/hiring/reports` if sole role |
 
 **Planning decisions:**
 
@@ -1291,34 +1436,33 @@ Any route move **must** keep this URL working (301 redirect or route alias). Int
 
 ### 22.9 UI / design alignment
 
-| Admin console | User panel today | Planning note |
-|---------------|------------------|---------------|
-| `AdminLayout` sidebar + header | Thin top nav + footer | Decide: match admin tokens (shadcn) but simplify chrome, or distinct "student" theme |
-| `max-w` full workspace | `max-w-2xl` on lists | Study flow already uses `max-w-lg` cards — keep mobile-first |
-| Recharts dashboards | None | Learner dashboard could show personal progress charts (optional P2) |
-| `bg-sidebar`, workspace branding | Logo + "My Learning" | Align logo, typography (`Inter`), primary color `#3B82F6` |
+| Admin console | Docs learner panel | Notes |
+|---------------|-------------------|-------|
+| `AdminLayout` sidebar + header | `DocsLearnLayout` sidebar + thin header | Docs-style nav inspired by docs.alyson.ai |
+| Full-width workspace | Guide reader + dashboard cards | Mobile-responsive sidebar (hidden on small screens) |
+| Recharts dashboards | Dashboard progress cards | Personal charts optional future work |
+| `bg-sidebar`, workspace branding | Logo + "Alyson Learning" | Shared Inter font, primary `#3B82F6` |
 
-Shared primitives: reuse `src/components/ui/*` (Card, Badge, Button, Progress already used).
+Shared primitives: `src/components/ui/*` (Card, Badge, Button, Progress).
 
-### 22.10 Suggested implementation phases
+### 22.10 Suggested implementation phases (remaining work)
 
-**Phase 1 — Foundation (1–2 sprints)**
+**Phase 1 — Legacy study polish**
 
-1. Create `src/components/learn/`; extract cards/header from route files
-2. Add `section_progress` writes; fix progress % calculation
-3. Render `section_assets` (video + doc) in study cards
-4. Add `/attempt` → learner breadcrumb or nest under `/learn` with redirect
+1. Add `section_progress` writes; fix legacy progress % calculation
+2. Render `section_assets` in legacy study cards
+3. Nest `/attempt` under learn chrome with redirect for email links
 
 **Phase 2 — Learner workflows**
 
-1. Course detail page with per-class progress
-2. Interactive quizzes + attempt history page
-3. Resume-last-position in study flow
+1. Interactive quizzes + attempt history in legacy study
+2. Resume-last-position in study flow
+3. Wire sidebar search (placeholder exists in `DocsLearnLayout`)
 
-**Phase 3 — Admin integration polish**
+**Phase 3 — Cross-surface polish**
 
-1. "View as learner" links on admin assignments/courses
-2. In-app notification feed (learner audience)
+1. "View as learner" deep links from admin
+2. In-app notification feed
 3. Profile / notification preferences
 
 ### 22.11 Files to touch (checklist)
@@ -1326,7 +1470,8 @@ Shared primitives: reuse `src/components/ui/*` (Card, Badge, Button, Progress al
 | Task | Likely files |
 |------|--------------|
 | New learner routes | `src/routes/learn.*.tsx` |
-| Layout / chrome | `src/routes/learn.tsx`, new `src/components/learn/UserLayout.tsx` |
+| Layout / chrome | `src/routes/learn.tsx`, `src/components/learn/DocsLearnLayout.tsx` |
+| Onboarding logic | `src/lib/onboarding/onboarding.functions.ts`, `onboarding-nav.server.ts` |
 | Server logic | `src/lib/learn.functions.ts`, new `src/lib/learn-progress.server.ts` |
 | Client API | `src/lib/learn-api.ts` |
 | Attempt integration | `src/routes/attempt.$assignmentId.tsx`, `src/lib/attempt.functions.ts` |
@@ -1335,19 +1480,163 @@ Shared primitives: reuse `src/components/ui/*` (Card, Badge, Button, Progress al
 | Assets in study | `src/components/learn/StudyAssetPlayer.tsx`, `SignedAssetImage.tsx` |
 | DB changes | `db/neon-schema.sql` (if new columns), `db/neon-rls-policies.sql`, `integrations/neon/types.ts` |
 | Email links | `src/lib/email/render.ts`, `src/lib/email/triggers.server.ts` |
+| Pipeline features | `src/lib/hiring-pipeline/*`, `db/hiring-pipeline.sql` |
 
 ### 22.12 Open questions for product planning
 
 Record answers here as decisions are made:
 
-1. **Enrollment model:** Department-based (current) vs per-user course assignment?
+1. **Enrollment model:** `onboarding_enrollments` (new joiners) vs department-wide legacy catalog — both coexist today.
 2. **Study vs test:** Are section quizzes practice-only, or should they gate class completion?
 3. **Attempt URL:** Keep `/attempt/$id` or standardize on `/learn/...`?
-4. **Who gets the user panel:** Trainees only, or all roles in student mode?
+4. **Who gets the user panel:** `candidate`/`trainee` forced; all other roles via student mode toggle.
 5. **Unpublished content:** Can trainers preview drafts in learner view?
 6. **Subjective grading:** Does learner see trainer feedback in-panel (not built today)?
 7. **Certificates:** Required for v1 or later?
+8. **Pipeline notifications:** Email triggers for trial due, CEO review scheduled, onboarding complete?
 
 ---
 
-*Last updated for user panel planning. Update this file when making architectural changes.*
+## 23. Unified New Joiner & Hiring Pipeline
+
+> **Canonical reference** for the end-to-end hiring → trial → onboarding journey. Other sections link here for detail.
+
+### 23.1 Business workflow
+
+HR manages one `hiring_pipelines` record per person from first contact through hire:
+
+1. **Create pipeline** — name, email, target role/department (`createPipelineFn`)
+2. **Tech Round 1 (AI)** — schedule online interview (`schedulePipelineRoundFn`, `round_type: tech_round_1`)
+3. **Tech Round 2 (Domain)** — schedule domain interview (`tech_round_2`)
+4. **Trial** — create trial project, send `@cintara.ai` invite as `candidate` (`createTrialProjectFn`, `sendCandidateInviteFn`)
+5. **Candidate experience** — signs up, bootstrap links pipeline + auto-enrolls onboarding courses; uses `/learn/dashboard`, `/learn/trial`, guides
+6. **CEO Review** — HR records outcome after trial (`recordCeoReviewFn`; DB `bill_review_*`)
+7. **CEO Interview** — schedule final round (`ceo_interview`)
+8. **Convert to trainee** — upgrades role, completes onboarding enrollment (`convertToTraineeFn`)
+9. **Completed** — pipeline terminal stage; user continues as `trainee` on `/learn/*`
+
+Reject at any point: `rejectPipelineFn` sets pipeline status `rejected`.
+
+Manual stage override: `passPipelineStageFn` (content managers).
+
+### 23.2 Data model
+
+| Table | Key columns | Purpose |
+|-------|-------------|---------|
+| `hiring_pipelines` | `candidate_name`, `candidate_email`, `target_role`, `target_department`, `current_stage`, `status`, `user_id`, `bill_review_status`, `bill_review_notes` | Single journey record per person |
+| `pipeline_stages` | `pipeline_id`, `stage`, `status`, `reviewer_user_id`, `notes` | Stage history |
+| `trial_projects` | `pipeline_id`, `title`, `brief`, `estimated_hours`, `due_at`, `submission_notes`, `submitted_at` | Trial work package |
+| `onboarding_enrollments` | `user_id`, `course_id`, `pipeline_id` | Per-user onboarding course assignments |
+
+**Cross-table links:**
+
+- `invites.pipeline_id` → pipeline being joined
+- `interview_sessions.pipeline_id` + `round_type` → scheduled rounds
+- `profiles.department` set on bootstrap from invite/pipeline
+
+### 23.3 Admin UI (`/hiring/pipeline`)
+
+| Surface | File | Features |
+|---------|------|----------|
+| Kanban index | `hiring.pipeline.index.tsx`, `PipelineBoard.tsx` | Columns per `KANBAN_STAGES`, compact stats, search/filter |
+| Detail | `hiring.pipeline.$pipelineId.tsx` | Stage timeline, schedule rounds, trial CRUD, CEO review, convert/reject |
+| Nav | `admin-data.ts` → "Hiring Pipeline" | Visible to content managers |
+| Users monitor | `users.tsx` | Pipeline stage badge via `STAGE_LABELS` |
+
+Auth: pipeline server functions use `requireContentManager` middleware (admin, trainer, or hiring_manager).
+
+### 23.4 Candidate / trainee UI
+
+| Route | Who | What |
+|-------|-----|------|
+| `/learn/dashboard` | `candidate`, `trainee` | Progress hub, links to core + role-track guides |
+| `/learn/guide/$courseId/$sectionId` | All learners | Section content in docs layout |
+| `/learn/trial` | `candidate` (nav link) | Trial brief, submit notes (`getMyTrialProjectFn`, `submitTrialProjectFn`) |
+| `/learn/assignments` | All learners | Assigned assessments → `/attempt/$id` |
+
+Shell: `DocsLearnLayout` — collapsible guide tree from `getOnboardingNavFn`, dashboard shortcut, assessments footer link.
+
+### 23.5 Server API surface
+
+**Admin / content manager** (`hiring-pipeline.functions.ts`):
+
+| Function | Purpose |
+|----------|---------|
+| `listPipelinesFn` | Kanban board data |
+| `getPipelineDetailFn` | Detail page + stage history |
+| `createPipelineFn` | New pipeline at `tech_round_1` |
+| `schedulePipelineRoundFn` | Create linked `interview_sessions` + magic link email |
+| `passPipelineStageFn` | Mark stage passed, advance `current_stage` |
+| `createTrialProjectFn` | Trial project for pipeline |
+| `sendCandidateInviteFn` | Invite with `candidate` role + `pipeline_id` |
+| `recordCeoReviewFn` | CEO Review outcome (`bill_review_*` in DB) |
+| `convertToTraineeFn` | `candidate` → `trainee`, onboarding stage |
+| `rejectPipelineFn` | Terminal reject |
+
+**Learner** (authenticated):
+
+| Function | Purpose |
+|----------|---------|
+| `getMyTrialProjectFn` | Trial for current user's linked pipeline |
+| `submitTrialProjectFn` | Submit trial completion notes |
+
+**Onboarding** (`onboarding.functions.ts`):
+
+| Function | Purpose |
+|----------|---------|
+| `getOnboardingNavFn` | Sidebar guide tree (core + department tracks) |
+
+### 23.6 Auth escalation
+
+```
+External (no account)     →  /interview/$token     →  tech rounds 1–2
+Provisional @cintara.ai   →  role: candidate       →  trial + guides
+Hired                     →  role: trainee         →  full onboarding + assignments
+```
+
+Bootstrap (`auth-bootstrap.server.ts`): on invite consume with `candidate` or `trainee`, calls `linkPipelineOnBootstrap()` which sets `hiring_pipelines.user_id`, profile department, and `auto_enroll_onboarding()` for core + role-track courses.
+
+### 23.7 File index
+
+| Concern | Path |
+|---------|------|
+| Stage constants & labels | `src/lib/hiring-pipeline/hiring-pipeline.shared.ts` |
+| DB operations | `src/lib/hiring-pipeline/hiring-pipeline.server.ts` |
+| Server functions | `src/lib/hiring-pipeline/hiring-pipeline.functions.ts` |
+| Admin kanban | `src/components/hiring/PipelineBoard.tsx` |
+| Admin routes | `src/routes/hiring.pipeline.index.tsx`, `hiring.pipeline.$pipelineId.tsx` |
+| Learn shell | `src/components/learn/DocsLearnLayout.tsx`, `src/routes/learn.tsx` |
+| Learn routes | `learn.dashboard.tsx`, `learn.guide.*.tsx`, `learn.trial.tsx`, `learn.assignments.tsx` |
+| Onboarding | `src/lib/onboarding/onboarding.functions.ts`, `onboarding-nav.server.ts` |
+| Departments / role mapping | `src/lib/departments.ts` |
+| SQL schema | `db/hiring-pipeline.sql` |
+| Onboarding seeds | `db/onboarding-seeds.sql` |
+| Apply scripts | `npm run db:apply-pipeline`, `npm run db:apply-onboarding-seeds` |
+
+### 23.8 MVP vs deferred
+
+**Shipped:**
+
+- Unified `hiring_pipelines` record per person
+- `candidate` role + pipeline-linked invites
+- Admin kanban + detail pages
+- Trial project + CEO review + convert to trainee
+- Docs learn UI + onboarding seed courses + auto-enroll on bootstrap
+- Interview rounds linked via `pipeline_id` / `round_type`
+
+**Not yet implemented:**
+
+| Gap | Notes |
+|-----|-------|
+| `learning_paths`, `learner_path_assignments` | Structured path assignments beyond course enrollments |
+| `policy_documents` | Standalone policy doc hosting |
+| `pipeline_events` | Dedicated audit/event stream table |
+| RLS for pipeline tables | `neon-rls-policies.sql` not extended |
+| Neon types | `integrations/neon/types.ts` missing pipeline tables |
+| Funnel metrics | Dashboard / hiring reports lack pipeline stage breakdown |
+| Milestone emails | No trial/onboarding notification templates |
+| `db-apply-all.mjs` | Pipeline migrations not in all-in-one script |
+
+---
+
+*Last updated for unified new-joiner / hiring pipeline feature. Update this file when making architectural changes.*

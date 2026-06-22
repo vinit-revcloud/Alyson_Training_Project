@@ -42,6 +42,7 @@ export interface CourseRow {
   cover: string;
   topics: string[];
   status: string;
+  is_core_onboarding: boolean;
   updated_at: string;
 }
 

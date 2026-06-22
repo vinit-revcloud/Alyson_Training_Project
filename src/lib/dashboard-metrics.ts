@@ -69,6 +69,9 @@ export interface DashboardMetrics {
   completionByDept: { name: string; value: number }[];
   recentActivity: DashboardActivityItem[];
   upcomingDeadlines: UpcomingDeadline[];
+  pipelineByStage: { stage: string; label: string; count: number }[];
+  overdueLearners: number;
+  onboardingTrackCompletion: { department: string; completed: number; total: number }[];
 }
 
 export async function fetchDashboardMetrics(): Promise<DashboardMetrics> {

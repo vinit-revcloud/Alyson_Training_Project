@@ -202,6 +202,9 @@ export async function runDailyReminders(): Promise<{ queued: number }> {
       skipJobCheck: true,
     });
   }
+  const { runOnboardingEmailJobs } = await import("@/lib/onboarding/onboarding-notify.server");
+  const onboarding = await runOnboardingEmailJobs();
+  queued += onboarding.queued;
   await recordRun("reminder_daily", queued);
   return { queued };
 }

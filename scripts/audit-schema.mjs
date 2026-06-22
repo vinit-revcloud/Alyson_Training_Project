@@ -45,6 +45,15 @@ const REQUIRED_TABLES = [
   "email_queue",
   "suppressed_emails",
   "interview_sessions",
+  "hiring_pipelines",
+  "pipeline_stages",
+  "trial_projects",
+  "onboarding_enrollments",
+  "learner_path_assignments",
+  "learner_item_progress",
+  "policy_documents",
+  "policy_acknowledgements",
+  "section_progress",
 ];
 
 const REQUIRED_FUNCTIONS = [
@@ -55,6 +64,7 @@ const REQUIRED_FUNCTIONS = [
   "expire_assignment",
   "record_attempt_result",
   "auto_assign_course",
+  "auto_enroll_onboarding",
   "has_role",
 ];
 
@@ -70,6 +80,16 @@ const REQUIRED_TEMPLATES = [
   "interview_invite",
   "interview_submitted",
   "interview_evaluated",
+  "trial_submitted",
+  "policy_ack_required",
+  "onboarding_stalled",
+];
+
+const REQUIRED_COLUMNS = [
+  { table: "invites", column: "pipeline_id" },
+  { table: "profiles", column: "last_learn_course_id" },
+  { table: "profiles", column: "last_learn_section_id" },
+  { table: "courses", column: "is_core_onboarding" },
 ];
 
 const REQUIRED_JOBS = [
@@ -118,6 +138,28 @@ try {
   for (const f of REQUIRED_FUNCTIONS) {
     if (fnSet.has(f)) pass(`function ${f}`);
     else fail(`MISSING function: ${f}`);
+  }
+
+  const cols = await client.query(
+    `SELECT table_name, column_name
+     FROM information_schema.columns
+     WHERE table_schema = 'public'`,
+  );
+  const colSet = new Set(cols.rows.map((r) => `${r.table_name}.${r.column_name}`));
+  for (const { table, column } of REQUIRED_COLUMNS) {
+    if (colSet.has(`${table}.${column}`)) pass(`column ${table}.${column}`);
+    else fail(`MISSING column: ${table}.${column}`);
+  }
+
+  const roles = await client.query(
+    `SELECT enumlabel FROM pg_enum e
+     JOIN pg_type t ON t.oid = e.enumtypid
+     WHERE t.typname = 'app_role'`,
+  );
+  const roleSet = new Set(roles.rows.map((r) => r.enumlabel));
+  for (const role of ["candidate", "hiring_manager", "ceo"]) {
+    if (roleSet.has(role)) pass(`app_role ${role}`);
+    else fail(`MISSING app_role enum value: ${role}`);
   }
 
   const tpls = await client.query(`SELECT key FROM email_templates`);

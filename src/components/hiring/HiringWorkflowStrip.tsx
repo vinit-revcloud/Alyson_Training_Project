@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { BarChart3, ClipboardCheck, Video } from "lucide-react";
+import { BarChart3, ClipboardCheck, GitBranch, Video } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const STEPS = [
@@ -11,8 +11,15 @@ const STEPS = [
     match: (path: string) => path.startsWith("/interviews/assessments") || path.includes("/assessments/builder"),
   },
   {
+    to: "/hiring/pipeline",
+    label: "2. Hiring pipeline",
+    hint: "Tech rounds → trial → CEO review → interview",
+    icon: GitBranch,
+    match: (path: string) => path.startsWith("/hiring/pipeline"),
+  },
+  {
     to: "/interviews",
-    label: "2. Schedule & proctor",
+    label: "3. Schedule & proctor",
     hint: "Send magic links to candidates",
     icon: Video,
     match: (path: string) =>
@@ -20,10 +27,10 @@ const STEPS = [
   },
   {
     to: "/hiring/reports",
-    label: "3. Hiring reports",
+    label: "4. Hiring reports",
     hint: "Scores, recommendations, funnel",
     icon: BarChart3,
-    match: (path: string) => path.startsWith("/hiring"),
+    match: (path: string) => path.startsWith("/hiring/reports"),
   },
 ] as const;
 
@@ -34,12 +41,12 @@ export function HiringWorkflowStrip({ className }: { className?: string }) {
   return (
     <nav
       className={cn(
-        "rounded-xl border border-violet-200/80 bg-violet-50/50 p-3 dark:border-violet-900/40 dark:bg-violet-950/20",
+        "rounded-xl border border-border bg-muted/40 p-3",
         className,
       )}
       aria-label="Hiring workflow"
     >
-      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-violet-800 dark:text-violet-300">
+      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
         Candidate screening workflow
       </p>
       <ol className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-stretch">
@@ -53,12 +60,12 @@ export function HiringWorkflowStrip({ className }: { className?: string }) {
                 className={cn(
                   "flex h-full flex-col rounded-lg border px-3 py-2 transition-colors",
                   active
-                    ? "border-violet-400 bg-white shadow-sm dark:border-violet-600 dark:bg-background"
-                    : "border-transparent bg-white/60 hover:border-violet-200 hover:bg-white dark:bg-background/40 dark:hover:border-violet-800",
+                    ? "border-primary bg-card shadow-soft"
+                    : "border-transparent bg-card/60 hover:border-border hover:bg-card",
                 )}
               >
                 <span className="flex items-center gap-1.5 text-[12px] font-semibold text-foreground">
-                  <Icon className="h-3.5 w-3.5 shrink-0 text-violet-600" />
+                  <Icon className="h-3.5 w-3.5 shrink-0 text-primary" strokeWidth={1.75} />
                   {step.label}
                 </span>
                 <span className="mt-0.5 text-[11px] text-muted-foreground">{step.hint}</span>

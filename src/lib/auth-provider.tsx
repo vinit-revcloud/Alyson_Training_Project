@@ -11,7 +11,7 @@ import {
 import type { AppSession } from "@/integrations/neon/client-types";
 import { db } from "@/integrations/neon/client";
 import { INVITE_TOKEN_STORAGE_KEY, isAllowedEmail } from "@/lib/auth-constants";
-import { apiBootstrapUser, apiFetchRoles } from "@/lib/auth-client";
+import { apiBootstrapUser } from "@/lib/auth-client";
 
 export function stashInviteToken(token: string | null | undefined): void {
   if (typeof window === "undefined" || !token?.trim()) return;
@@ -20,7 +20,15 @@ export function stashInviteToken(token: string | null | undefined): void {
 
 function readInviteToken(): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem(INVITE_TOKEN_STORAGE_KEY);
+  const stored = localStorage.getItem(INVITE_TOKEN_STORAGE_KEY);
+  if (stored?.trim()) return stored.trim();
+  const params = new URLSearchParams(window.location.search);
+  const urlToken = params.get("token")?.trim();
+  if (urlToken) {
+    localStorage.setItem(INVITE_TOKEN_STORAGE_KEY, urlToken);
+    return urlToken;
+  }
+  return null;
 }
 
 function clearInviteToken(): void {
@@ -39,7 +47,12 @@ export async function readAuthSession(): Promise<AppSession | null> {
   return (data.session as AppSession | null) ?? null;
 }
 
-async function resolveAuthToken(): Promise<string | null> {
+async function resolveAuthToken(attempt = 0): Promise<string | null> {
+  const { data, error } = await db.auth.getSession();
+  if (!error) {
+    const access = data.session?.access_token?.trim();
+    if (access) return access;
+  }
   if (typeof db.auth.getJWTToken === "function") {
     try {
       const jwt = await db.auth.getJWTToken();
@@ -48,9 +61,11 @@ async function resolveAuthToken(): Promise<string | null> {
       /* fall through */
     }
   }
-  const { data, error } = await db.auth.getSession();
-  if (error) return null;
-  return data.session?.access_token?.trim() ?? null;
+  if (attempt < 4) {
+    await sleep(400);
+    return resolveAuthToken(attempt + 1);
+  }
+  return null;
 }
 
 type BetterAuthSessionSubscriber = {
@@ -100,10 +115,19 @@ async function bootstrapRolesForSession(sess: AppSession, attempt = 0): Promise<
     undefined;
 
   const inviteToken = readInviteToken() ?? undefined;
+  const emailHint = sess.user.email?.trim().toLowerCase() || undefined;
 
   try {
-    const result = await apiBootstrapUser(token, { inviteToken, displayName });
-    if (result.roles.length > 0) clearInviteToken();
+    const result = await apiBootstrapUser(token, { inviteToken, displayName, emailHint });
+    if (result.roles.length > 0) {
+      clearInviteToken();
+      return result.roles;
+    }
+    if (inviteToken) {
+      throw new Error(
+        "Invite could not be applied. Open the invite link again, then click Retry setup.",
+      );
+    }
     return result.roles;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -115,13 +139,7 @@ async function bootstrapRolesForSession(sess: AppSession, attempt = 0): Promise<
       await sleep(500);
       return bootstrapRolesForSession(sess, attempt + 1);
     }
-    try {
-      const roles = await apiFetchRoles(token);
-      if (roles.length > 0) clearInviteToken();
-      return roles;
-    } catch (fallbackErr) {
-      throw err instanceof Error ? err : fallbackErr;
-    }
+    throw err instanceof Error ? err : new Error(message);
   }
 }
 
@@ -150,10 +168,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setBootstrapError(null);
     try {
       const resolvedRoles = await ensureBootstrap(sess);
-      bootstrappedFor.current = sess.user.id;
       setRoles(resolvedRoles);
-      if (resolvedRoles.length === 0) {
-        setBootstrapError("No workspace roles assigned. Ask an admin for an invite.");
+      if (resolvedRoles.length > 0) {
+        bootstrappedFor.current = sess.user.id;
+        clearInviteToken();
+      } else {
+        bootstrappedFor.current = sess.user.id;
+        setBootstrapError(
+          "No workspace roles assigned. Open your invite link again, then click Retry setup.",
+        );
       }
     } catch (err) {
       const suspended =
@@ -178,6 +201,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const retryBootstrap = useCallback(() => {
     retryNonce.current += 1;
     bootstrappedFor.current = null;
+    if (session?.user?.id) bootstrapInflight.delete(session.user.id);
+    readInviteToken();
     if (session?.user?.id) void runBootstrap(session);
   }, [session, runBootstrap]);
 

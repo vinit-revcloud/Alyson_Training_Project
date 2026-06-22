@@ -1,5 +1,6 @@
 import { getPgPool } from "@/lib/pg.server";
 import type { DashboardActivityItem, DashboardMetrics } from "@/lib/dashboard-metrics";
+import { STAGE_LABELS } from "@/lib/hiring-pipeline/hiring-pipeline.shared";
 
 const DAY_KEYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -343,6 +344,48 @@ export async function fetchDashboardMetricsFromDb(): Promise<DashboardMetrics> {
       iconKey: r.iconKey,
     }));
 
+  let pipelineByStage: { stage: string; label: string; count: number }[] = [];
+  let overdueLearners = 0;
+  let onboardingTrackCompletion: { department: string; completed: number; total: number }[] = [];
+
+  try {
+    const [pipelineStageRes, overdueRes, trackRes] = await Promise.all([
+      pool.query<{ current_stage: string; count: string }>(
+        `SELECT current_stage, COUNT(*)::text AS count
+         FROM hiring_pipelines WHERE status = 'active'
+         GROUP BY current_stage`,
+      ),
+      pool.query<{ count: string }>(
+        `SELECT COUNT(DISTINCT learner_user_id)::text AS count
+         FROM assessment_assignments
+         WHERE due_at < now() AND status NOT IN ('passed', 'expired')`,
+      ),
+      pool.query<{ department: string; completed: string; total: string }>(
+        `SELECT oe.track_department AS department,
+                COUNT(*) FILTER (WHERE lpa.status = 'completed')::text AS completed,
+                COUNT(*)::text AS total
+         FROM onboarding_enrollments oe
+         LEFT JOIN learner_path_assignments lpa
+           ON lpa.user_id = oe.user_id AND lpa.assignment_type = 'role_track'
+         GROUP BY oe.track_department`,
+      ),
+    ]);
+
+    pipelineByStage = pipelineStageRes.rows.map((r) => ({
+      stage: r.current_stage,
+      label: STAGE_LABELS[r.current_stage as keyof typeof STAGE_LABELS] ?? r.current_stage,
+      count: Number(r.count),
+    }));
+    overdueLearners = Number(overdueRes.rows[0]?.count ?? 0);
+    onboardingTrackCompletion = trackRes.rows.map((r) => ({
+      department: r.department,
+      completed: Number(r.completed),
+      total: Number(r.total),
+    }));
+  } catch (err) {
+    console.warn("[dashboard-metrics] hiring/onboarding widgets unavailable:", err);
+  }
+
   return {
     atRisk,
     topPerformers,
@@ -365,5 +408,8 @@ export async function fetchDashboardMetricsFromDb(): Promise<DashboardMetrics> {
     completionByDept,
     recentActivity,
     upcomingDeadlines,
+    pipelineByStage,
+    overdueLearners,
+    onboardingTrackCompletion,
   };
 }

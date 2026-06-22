@@ -2,7 +2,7 @@ import { createMiddleware } from "@tanstack/react-start";
 import { createClient, SupabaseAuthAdapter } from "@neondatabase/neon-js";
 import type { Database } from "./types";
 import { userFromRequest } from "@/lib/auth-token.server";
-import { assertContentManager } from "@/lib/content-manager.server";
+import { assertContentManager, assertHiringReadAccess } from "@/lib/content-manager.server";
 import { getNeonAuthUrl, getNeonDataApiUrl } from "./env";
 
 async function buildAuthContext() {
@@ -50,5 +50,12 @@ export const requireSupabaseAuth = requireDbAuth;
 export const requireContentManager = createMiddleware({ type: "function" }).server(async ({ next }) => {
   const context = await buildAuthContext();
   await assertContentManager(context.userId);
+  return next({ context });
+});
+
+/** Read-only hiring surfaces — admin, trainer, hiring manager, or CEO. */
+export const requireHiringRead = createMiddleware({ type: "function" }).server(async ({ next }) => {
+  const context = await buildAuthContext();
+  await assertHiringReadAccess(context.userId);
   return next({ context });
 });

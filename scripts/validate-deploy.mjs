@@ -1,7 +1,7 @@
 /**
  * Pre-deploy environment and build readiness checks.
  * Usage: npm run validate:deploy
- * Optional: NODE_ENV=production npm run validate:deploy  (strict production rules)
+ * Optional: NODE_ENV=production npm run validate:deploy -- --production
  */
 
 import { readFileSync, existsSync } from "node:fs";
@@ -34,39 +34,50 @@ function loadEnv() {
   }
 }
 
+function env(key) {
+  return process.env[key]?.trim() ?? "";
+}
+
+function hasNeonAuthUrl() {
+  return Boolean(env("VITE_NEON_AUTH_URL") || env("NEON_AUTH_URL"));
+}
+
+function hasNeonDataApiUrl() {
+  return Boolean(env("VITE_NEON_DATA_API_URL") || env("NEON_DATA_API_URL"));
+}
+
 loadEnv();
 
 const isProdCheck = process.env.NODE_ENV === "production" || process.argv.includes("--production");
+const isVercelCheck = Boolean(process.env.VERCEL) || process.argv.includes("--vercel");
 
-const required = [
-  "VITE_NEON_AUTH_URL",
-  "VITE_NEON_DATA_API_URL",
+const warnings = [];
+const errors = [];
+
+if (!hasNeonAuthUrl()) {
+  errors.push("Missing required env: VITE_NEON_AUTH_URL (or NEON_AUTH_URL for server runtime)");
+}
+if (!hasNeonDataApiUrl()) {
+  errors.push("Missing required env: VITE_NEON_DATA_API_URL (or NEON_DATA_API_URL for server runtime)");
+}
+
+for (const key of [
   "DATABASE_URL",
   "CRON_SECRET",
   "APP_BASE_URL",
   "AWS_ACCESS_KEY_ID",
   "AWS_SECRET_ACCESS_KEY",
-];
-
-const warnings = [];
-const errors = [];
-
-for (const key of required) {
-  if (!process.env[key]?.trim()) {
+]) {
+  if (!env(key)) {
     errors.push(`Missing required env: ${key}`);
   }
 }
 
-const appBaseUrl = process.env.APP_BASE_URL?.trim() ?? "";
+const appBaseUrl = env("APP_BASE_URL");
 if (appBaseUrl && /localhost|127\.0\.0\.1/i.test(appBaseUrl) && isProdCheck) {
   errors.push("APP_BASE_URL must be your production HTTPS URL (not localhost)");
 }
-if (
-  isProdCheck &&
-  !appBaseUrl &&
-  !process.env.VERCEL_URL &&
-  !process.argv.includes("--vercel")
-) {
+if (isProdCheck && !appBaseUrl && !process.env.VERCEL_URL && !isVercelCheck) {
   errors.push("APP_BASE_URL is required in production (or deploy on Vercel with VERCEL_URL)");
 }
 
@@ -74,25 +85,44 @@ if (process.env.EMAIL_AUTO_PROCESS === "1" && isProdCheck) {
   errors.push("EMAIL_AUTO_PROCESS must be unset or 0 in production");
 }
 
-if (!process.env.DEEPSEEK_API_KEY?.trim() && !process.env.OPENROUTER_API_KEY?.trim()) {
+if (!env("DEEPSEEK_API_KEY") && !env("OPENROUTER_API_KEY")) {
   errors.push("Set DEEPSEEK_API_KEY and/or OPENROUTER_API_KEY");
 }
 
-if (isProdCheck && process.env.BOOTSTRAP_ADMIN_EMAILS?.includes("admin@cintara.ai")) {
+if (isProdCheck && env("BOOTSTRAP_ADMIN_EMAILS").includes("admin@cintara.ai")) {
   warnings.push("BOOTSTRAP_ADMIN_EMAILS still lists admin@cintara.ai — remove after initial bootstrap");
 }
 
-if (!process.env.SES_CONFIGURATION_SET?.trim()) {
+if (!env("SES_CONFIGURATION_SET")) {
   warnings.push("SES_CONFIGURATION_SET is unset — SES event tracking may be limited");
 }
 
-if (!process.env.EMAIL_WORKFLOW_LAMBDA_ARN?.trim()) {
+if (!env("EMAIL_WORKFLOW_LAMBDA_ARN")) {
   warnings.push(
     "EMAIL_WORKFLOW_LAMBDA_ARN is unset — assignment email Step Functions workflow will not run",
   );
 }
 
-if (!existsSync(resolve(root, ".output/server/index.mjs"))) {
+if (isProdCheck && isVercelCheck && !env("BLOB_READ_WRITE_TOKEN")) {
+  warnings.push(
+    "BLOB_READ_WRITE_TOKEN is unset — file uploads on Vercel will not persist (use Vercel Blob)",
+  );
+}
+
+if (isProdCheck && !isVercelCheck && !env("NEON_AUTH_URL") && env("VITE_NEON_AUTH_URL")) {
+  warnings.push(
+    "Set NEON_AUTH_URL at runtime for Docker/self-hosted (VITE_* is build-time only)",
+  );
+}
+if (isProdCheck && !isVercelCheck && !env("NEON_DATA_API_URL") && env("VITE_NEON_DATA_API_URL")) {
+  warnings.push(
+    "Set NEON_DATA_API_URL at runtime for Docker/self-hosted (VITE_* is build-time only)",
+  );
+}
+
+const hasNodeBuild = existsSync(resolve(root, ".output/server/index.mjs"));
+const hasVercelBuild = existsSync(resolve(root, ".vercel/output"));
+if (!hasNodeBuild && !hasVercelBuild) {
   warnings.push("No production build found — run npm run build before deploy");
 }
 

@@ -9,6 +9,7 @@ export interface WorkspaceUserRow {
   status: string;
   roles: string[];
   assigned_courses: number;
+  pipeline_stage: string | null;
 }
 
 export async function listWorkspaceUsersFromDb(): Promise<WorkspaceUserRow[]> {
@@ -21,6 +22,7 @@ export async function listWorkspaceUsersFromDb(): Promise<WorkspaceUserRow[]> {
     status: string;
     roles: string[];
     assigned_courses: number;
+    pipeline_stage: string | null;
   }>(
     `WITH courses_by_dept AS (
        SELECT cd.department, COUNT(DISTINCT cd.course_id)::int AS n
@@ -29,7 +31,12 @@ export async function listWorkspaceUsersFromDb(): Promise<WorkspaceUserRow[]> {
      )
      SELECT p.user_id, p.display_name, p.email, p.department, p.status,
             COALESCE(array_agg(DISTINCT ur.role::text) FILTER (WHERE ur.role IS NOT NULL), '{}') AS roles,
-            COALESCE(MAX(cbd.n), 0)::int AS assigned_courses
+            COALESCE(MAX(cbd.n), 0)::int AS assigned_courses,
+            (
+              SELECT hp.current_stage FROM hiring_pipelines hp
+              WHERE hp.user_id = p.user_id
+              ORDER BY hp.updated_at DESC LIMIT 1
+            ) AS pipeline_stage
      FROM profiles p
      LEFT JOIN user_roles ur ON ur.user_id = p.user_id
      LEFT JOIN courses_by_dept cbd ON cbd.department = p.department
@@ -45,6 +52,7 @@ export async function listWorkspaceUsersFromDb(): Promise<WorkspaceUserRow[]> {
     status: r.status ?? "active",
     roles: r.roles ?? [],
     assigned_courses: r.assigned_courses ?? 0,
+    pipeline_stage: r.pipeline_stage,
   }));
 }
 

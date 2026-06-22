@@ -136,3 +136,20 @@
 @utility shadow-glow {
   box-shadow: var(--shadow-glow);
 }
+
+/* Docs-style learner panel (Alyson brand) */
+.learn-shell,
+.learn-panel {
+  --learn-bg: #f8fafc;
+  --learn-card: #ffffff;
+  --learn-border: #e5e7eb;
+  --learn-accent: #3b82f6;
+  --learn-sidebar-width: 240px;
+  --learn-toc-width: 220px;
+  --learn-sidebar-bg: #f1f5f9;
+}
+
+.learn-card {
+  background-color: var(--learn-card);
+  border-radius: 10px;
+}

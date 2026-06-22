@@ -7,16 +7,21 @@ export const Route = createFileRoute("/api/auth/bootstrap")({
     handlers: {
       POST: async ({ request }) => {
         try {
-          const authUser = await userFromRequest(request);
           const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
           const inviteToken =
             typeof body.inviteToken === "string" && body.inviteToken.trim()
               ? body.inviteToken.trim()
               : undefined;
+          const emailHint =
+            typeof body.emailHint === "string" && body.emailHint.trim()
+              ? body.emailHint.trim().toLowerCase()
+              : undefined;
           const displayName =
             typeof body.displayName === "string" && body.displayName.trim()
               ? body.displayName.trim()
               : undefined;
+
+          const authUser = await userFromRequest(request, { inviteToken, emailHint });
 
           const roles = await bootstrapUserAccount({
             userId: authUser.id,
