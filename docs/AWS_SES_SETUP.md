@@ -6,7 +6,7 @@ All LMS email — assignments, daily reminders, escalations, invites, failure/re
 
 ## 1. Verify domain in SES
 
-1. Open [Amazon SES](https://console.aws.amazon.com/ses/) in your chosen region (e.g. `us-east-1`).
+1. Open [Amazon SES](https://console.aws.amazon.com/ses/) in **US West (Oregon) `us-west-2`** (or your chosen region — `AWS_REGION` / `SES_REGION` must match).
 2. **Verified identities** → **Create identity** → **Domain** → `cintara.ai`.
 3. Enable **DKIM** and copy the 3 CNAME records into your DNS.
 

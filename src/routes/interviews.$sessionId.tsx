@@ -933,7 +933,9 @@ function CandidatePerformanceBanner({
               <p className="text-[12px] text-muted-foreground">
                 {submissionLoading
                   ? "Loading submitted answers…"
-                  : `${answeredCount} answers recorded · AI grading in progress`}
+                  : session.status === "submitted"
+                    ? `${answeredCount} answers recorded · AI evaluation queued (click Run evaluation if this takes more than 2 minutes)`
+                    : `${answeredCount} answers recorded · AI grading in progress`}
               </p>
             </div>
           </div>

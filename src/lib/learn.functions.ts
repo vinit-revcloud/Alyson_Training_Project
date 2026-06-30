@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireDbAuth } from "@/integrations/neon/auth-middleware";
 import { getPgPool } from "@/lib/pg.server";
-import { assertLearnerCourseAccess } from "@/lib/learn-access.server";
+import { getAccessibleCourseIdsForUser, assertLearnerCourseAccess } from "@/lib/learn-access.server";
 import type { LearnerAssignment, LearnerCourse, StudyCard } from "@/lib/learn-api";
 
 export const listMyAssignmentsFn = createServerFn({ method: "POST" })
@@ -73,32 +73,14 @@ export const listMyCoursesFn = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<LearnerCourse[]> => {
     if (data.userId !== context.userId) throw new Error("Forbidden");
     const pool = getPgPool();
-    const profileRes = await pool.query<{ department: string | null }>(
-      `SELECT department FROM profiles WHERE user_id = $1`,
-      [data.userId],
-    );
-    const dept = profileRes.rows[0]?.department;
-
-    const coreRes = await pool.query<{ id: string }>(
-      `SELECT id FROM courses WHERE is_core_onboarding = true AND status = 'published'`,
-    );
-    const deptRes = dept
-      ? await pool.query<{ course_id: string }>(
-          `SELECT course_id FROM course_departments WHERE department = $1`,
-          [dept],
-        )
-      : { rows: [] as { course_id: string }[] };
-    const courseIds = [
-      ...new Set([
-        ...deptRes.rows.map((r) => r.course_id),
-        ...coreRes.rows.map((r) => r.id),
-      ]),
-    ];
+    const accessible = await getAccessibleCourseIdsForUser(data.userId);
+    const courseIds = [...accessible];
     if (!courseIds.length) return [];
 
     const [coursesRes, classesRes, activityRes] = await Promise.all([
       pool.query<{ id: string; title: string; description: string | null; role: string | null }>(
-        `SELECT id, title, description, role FROM courses WHERE id = ANY($1::uuid[])`,
+        `SELECT id, title, description, role FROM courses
+         WHERE id = ANY($1::uuid[]) AND status = 'published'`,
         [courseIds],
       ),
       pool.query<{ id: string; course_id: string }>(

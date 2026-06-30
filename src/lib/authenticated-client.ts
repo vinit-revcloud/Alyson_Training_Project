@@ -41,7 +41,10 @@ export async function authHeaderRecord(): Promise<Record<string, string>> {
 
 export async function readApiError(res: Response): Promise<string> {
   try {
-    const body = (await res.json()) as { error?: string; message?: string };
+    const body = (await res.json()) as { error?: string; message?: string; details?: string };
+    if (body.error?.trim() && body.details?.trim()) {
+      return `${body.error.trim()}: ${body.details.trim()}`;
+    }
     if (body.error?.trim()) return body.error.trim();
     if (body.message?.trim()) return body.message.trim();
   } catch {

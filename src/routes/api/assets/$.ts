@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { readAssetFile } from "@/lib/asset-storage.server";
+import { readAssetFile, assetStorageUsesS3 } from "@/lib/asset-storage.server";
 import type { AssetBucket } from "@/lib/asset-storage.shared";
 import { assetUrlsRequireSignature, verifyAssetSignature } from "@/lib/asset-signing.server";
+import { objectExistsOnS3 } from "@/lib/asset-s3.server";
 
 const BUCKETS = new Set<string>(["class-videos", "class-documents", "class-transcripts", "interview-papers"]);
 
@@ -20,6 +21,10 @@ export const Route = createFileRoute("/api/assets/$")({
         const url = new URL(request.url);
         const exp = url.searchParams.get("exp");
         const sig = url.searchParams.get("sig");
+
+        if (assetStorageUsesS3() && (await objectExistsOnS3(bucket, storagePath))) {
+          return new Response("Use signed asset URL", { status: 403 });
+        }
 
         if (assetUrlsRequireSignature() && !verifyAssetSignature(bucket, storagePath, exp, sig)) {
           return new Response("Forbidden", { status: 403 });

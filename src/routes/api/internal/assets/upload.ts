@@ -30,7 +30,7 @@ export const Route = createFileRoute("/api/internal/assets/upload")({
           }
 
           const buffer = Buffer.from(await file.arrayBuffer());
-          await uploadAssetFile(bucket as AssetBucket, storagePath, buffer);
+          await uploadAssetFile(bucket as AssetBucket, storagePath, buffer, file.type || null);
           return Response.json({ ok: true, path: storagePath });
         } catch (err) {
           const message = err instanceof Error ? err.message : "Upload failed";

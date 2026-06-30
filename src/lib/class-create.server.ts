@@ -1,6 +1,7 @@
 import type { PoolClient } from "pg";
 import { getPgPool } from "@/lib/pg.server";
 import type { ClassStatus, Level } from "@/lib/class-create.validation";
+import { syncCourseOnClassStatus } from "@/lib/class-publish.server";
 
 const COVERS = [
   "from-blue-500 to-indigo-600",
@@ -180,6 +181,8 @@ export async function createClassRecordsInDb(
         );
       }
     }
+
+    await syncCourseOnClassStatus(client, courseId, input.status, input.audience);
 
     await client.query("COMMIT");
     return { classId, courseId, sections: sectionRows };

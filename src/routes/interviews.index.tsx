@@ -48,6 +48,7 @@ import {
   listInterviewSessionsFn,
   openInterviewSessionFn,
 } from "@/lib/interview/interview.functions";
+import { INTERVIEW_LIST_DEFAULT_LIMIT } from "@/lib/interview/interview.shared";
 import type {
   AssessmentMode,
   HireRecommendation,
@@ -85,14 +86,21 @@ function InterviewsPage() {
   const { roles } = useSession();
   const readOnly = isExecutiveReadOnly(roles);
   const listFn = useServerFn(listInterviewSessionsFn);
+  const [page, setPage] = useState(0);
   const [deleteTarget, setDeleteTarget] = useState<InterviewSessionListItem | null>(null);
   const deleteFn = useServerFn(deleteInterviewSessionFn);
-  const { data: sessions = [], isLoading, isError, refetch } = useQuery({
-    queryKey: ["interview-sessions"],
-    queryFn: () => listFn(),
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ["interview-sessions", page],
+    queryFn: () =>
+      listFn({
+        data: { limit: INTERVIEW_LIST_DEFAULT_LIMIT, offset: page * INTERVIEW_LIST_DEFAULT_LIMIT },
+      }),
     refetchInterval: INTERVIEW_LIST_POLL_MS,
     ...INTERVIEW_POLL_OPTS,
   });
+  const sessions = data?.sessions ?? [];
+  const total = data?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / INTERVIEW_LIST_DEFAULT_LIMIT));
 
   const remove = useMutation({
     mutationFn: (sessionId: string) => deleteFn({ data: { sessionId } }),
@@ -151,16 +159,44 @@ function InterviewsPage() {
             No interview sessions yet. Schedule one to send a candidate a magic link.
           </div>
         ) : (
-          <div className="divide-y divide-border">
-            {sessions.map((s) => (
-              <InterviewSessionRow
-                key={s.id}
-                session={s}
-                readOnly={readOnly}
-                onDelete={() => setDeleteTarget(s)}
-              />
-            ))}
-          </div>
+          <>
+            <div className="divide-y divide-border">
+              {sessions.map((s) => (
+                <InterviewSessionRow
+                  key={s.id}
+                  session={s}
+                  readOnly={readOnly}
+                  onDelete={() => setDeleteTarget(s)}
+                />
+              ))}
+            </div>
+            {total > INTERVIEW_LIST_DEFAULT_LIMIT ? (
+              <div className="flex items-center justify-between border-t border-border px-4 py-3 text-[12px] text-muted-foreground">
+                <span>
+                  Showing {page * INTERVIEW_LIST_DEFAULT_LIMIT + 1}–
+                  {Math.min((page + 1) * INTERVIEW_LIST_DEFAULT_LIMIT, total)} of {total}
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={page === 0}
+                    onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={page + 1 >= pageCount}
+                    onClick={() => setPage((p) => p + 1)}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+          </>
         )}
       </Card>
 

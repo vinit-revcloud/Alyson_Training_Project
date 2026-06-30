@@ -1,4 +1,5 @@
 import { getPgPool } from "@/lib/pg.server";
+import { assetPublicUrl, type AssetBucket } from "@/lib/asset-storage.shared";
 
 export interface OnboardingNavSection {
   id: string;
@@ -326,7 +327,11 @@ export async function getSectionContentFromDb(
       id: a.id,
       kind: a.kind,
       label: a.file_name,
-      url: a.external_url ?? (a.storage_path ? `/api/assets/${a.storage_path}` : null),
+      url:
+        a.external_url ??
+        (a.storage_bucket && a.storage_path
+          ? assetPublicUrl(a.storage_bucket as AssetBucket, a.storage_path)
+          : null),
       storageBucket: a.storage_bucket,
       storagePath: a.storage_path,
       extractedText: a.extracted_text,

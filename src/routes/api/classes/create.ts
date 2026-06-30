@@ -14,9 +14,10 @@ const SectionInputSchema = z.object({
   videoLink: z.string().optional(),
 });
 
+/** parentCourse is the course title (find-or-create), not a UUID — matches class-create.functions.ts */
 const CreateClassBodySchema = z.object({
   name: z.string().min(1).max(200),
-  parentCourse: z.string().uuid(),
+  parentCourse: z.string().min(1).max(200),
   level: LevelSchema,
   audience: z.string(),
   summary: z.string(),
@@ -38,7 +39,8 @@ export const Route = createFileRoute("/api/classes/create")({
           return Response.json(result);
         } catch (err) {
           if (err instanceof z.ZodError) {
-            return Response.json({ error: "Invalid request body" }, { status: 400 });
+            const detail = err.issues[0]?.message ?? "validation failed";
+            return Response.json({ error: "Invalid request body", details: detail }, { status: 400 });
           }
           const message = err instanceof Error ? err.message : "Create class failed";
           const status = message.includes("Unauthorized")

@@ -116,7 +116,7 @@ Provider chain in `lib/ai/llm.ts`: **DeepSeek first** → **OpenRouter fallback*
 
 ### Asset storage
 
-Files stored at `{cwd}/storage/{bucket}/{path}` on local disk via `asset-storage.server.ts`. **Not S3** — the Settings UI showing "Connected" is cosmetic. Asset URLs are HMAC-signed in production using `CRON_SECRET` or `ASSET_SIGNING_SECRET`. In Docker, mount a volume at `storage/`.
+Backends (see `asset-storage.server.ts`): **S3** in production when `S3_ASSETS_BUCKET` is set, else **local disk** at `{cwd}/storage/{bucket}/{path}` (dev), or **Vercel Blob** if `BLOB_READ_WRITE_TOKEN` is set without S3. Keys: `{optional prefix}/{bucket}/{classId}/{sectionId}/...`. Learners get **S3 presigned URLs** in S3 mode; local/Blob use HMAC-signed `/api/assets/...` proxy. PDF text for AI is cached once in `section_assets.extracted_text` (single binary for study + assessments). Setup: `scripts/configure-s3-assets.md`; migrate: `npm run assets:migrate-s3`.
 
 ### Email system
 

@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/neon/auth-middleware";
 import { supabaseAdmin } from "@/integrations/neon/client.server";
+import { mcqAnswersMatch } from "@/lib/mcq-match.server";
 
 const AssignmentIdInput = z.object({ assignmentId: z.string().uuid() });
 
@@ -97,7 +98,7 @@ export const gradeAndSubmitAttempt = createServerFn({ method: "POST" })
     // 3. Load questions WITH correct answers (server-side only)
     const { data: questions, error: qErr } = await supabaseAdmin
       .from("assessment_questions")
-      .select("id, type, correct_answer")
+      .select("id, type, correct_answer, options")
       .eq("assessment_id", assignment.assessment_id);
     if (qErr) throw new Error(qErr.message);
 
@@ -113,9 +114,9 @@ export const gradeAndSubmitAttempt = createServerFn({ method: "POST" })
     const mcqs = (questions ?? []).filter((q) => q.type === "mcq");
     let correct = 0;
     for (const q of mcqs) {
-      const given = (data.answers[q.id as string] ?? "").trim().toLowerCase();
-      const expected = ((q.correct_answer as string | null) ?? "").trim().toLowerCase();
-      if (given && given === expected) correct += 1;
+      const given = data.answers[q.id as string] ?? "";
+      const options = Array.isArray(q.options) ? (q.options as string[]) : null;
+      if (mcqAnswersMatch(given, q.correct_answer as string | null, options)) correct += 1;
     }
     const score = mcqs.length ? Math.round((correct / mcqs.length) * 100) : 0;
     const passed = score >= passMark;

@@ -1,5 +1,7 @@
 import { getPgPool } from "@/lib/pg.server";
 import type { ClassStatus } from "@/lib/class-create.validation";
+import { syncCourseOnClassStatus } from "@/lib/class-publish.server";
+import { gatherClassMaterialPg } from "@/lib/ai/section-material.server";
 import type {
   ClassAssessmentSeed,
   ClassRow,
@@ -139,19 +141,9 @@ export async function getClassAssessmentSeedFromDb(classId: string): Promise<Cla
     rows = qRes.rows;
   }
 
-  const fileNames = sections.flatMap((s) => s.assets.map((a) => a.file_name));
-  const materialText = [
-    `# ${cls?.name ?? "Class"}`,
-    cls?.summary ? `Summary: ${cls.summary}` : "",
-    cls?.audience ? `Audience: ${cls.audience}` : "",
-    cls?.topics?.length ? `Topics: ${cls.topics.join(", ")}` : "",
-    ...sections.map((s) => {
-      const assets = s.assets.map((a) => `${a.kind}: ${a.file_name}`).join("; ");
-      return `\n## ${s.title}\n${s.description}\nObjectives: ${s.objectives || "Not specified"}\nAssets: ${assets || "none"}`;
-    }),
-  ]
-    .filter(Boolean)
-    .join("\n");
+  const { materialText, fileNames } = await gatherClassMaterialPg(classId);
+  const fileNamesFromAssets = sections.flatMap((s) => s.assets.map((a) => a.file_name));
+  const mergedFileNames = [...new Set([...fileNames, ...fileNamesFromAssets])];
 
   const questions = rows.map((q, i) => ({
     id: q.id ?? `section-q-${i}`,
@@ -168,20 +160,29 @@ export async function getClassAssessmentSeedFromDb(classId: string): Promise<Cla
 
   return {
     materialText,
-    fileNames,
+    fileNames: mergedFileNames,
     questions,
     sectionCount: sections.length,
-    assetCount: fileNames.length,
+    assetCount: mergedFileNames.length,
   };
 }
 
 export async function updateClassStatusInDb(classId: string, status: ClassStatus): Promise<void> {
   const pool = getPgPool();
+  const clsRes = await pool.query<{ course_id: string | null; audience: string | null }>(
+    `SELECT course_id, audience FROM classes WHERE id = $1`,
+    [classId],
+  );
+  const cls = clsRes.rows[0];
+  if (!cls) throw new Error("Class not found");
+
   const { rowCount } = await pool.query(
     `UPDATE classes SET status = $2, updated_at = now() WHERE id = $1`,
     [classId, status],
   );
   if (!rowCount) throw new Error("Class not found");
+
+  await syncCourseOnClassStatus(pool, cls.course_id, status, cls.audience);
 }
 
 export async function updateClassMetaInDb(

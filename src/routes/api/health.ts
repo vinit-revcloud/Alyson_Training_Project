@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { authorizeCronRequest } from "@/lib/cron-auth.server";
 import { getPgPool } from "@/lib/pg.server";
-import { assetStorageBackend } from "@/lib/asset-storage.server";
+import { assetStorageBackend, blobStorageConfigured, s3StorageConfigured } from "@/lib/asset-storage.server";
+import { s3BucketReachable } from "@/lib/asset-s3.server";
 import { getNeonAuthUrl } from "@/integrations/neon/env";
 import { getDeepSeekApiKey, getOpenRouterApiKey, getSesConfig } from "@/lib/config.server";
 
@@ -39,7 +40,11 @@ export const Route = createFileRoute("/api/health")({
         }
 
         checks.storage = assetStorageBackend();
-        checks.blobConfigured = Boolean(process.env.BLOB_READ_WRITE_TOKEN?.trim());
+        checks.s3Configured = s3StorageConfigured();
+        checks.blobConfigured = blobStorageConfigured();
+        if (s3StorageConfigured()) {
+          checks.s3Reachable = await s3BucketReachable();
+        }
         checks.sesConfigured = Boolean(getSesConfig().region);
         checks.aiConfigured = Boolean(getDeepSeekApiKey() || getOpenRouterApiKey());
         checks.poolMax = process.env.PG_POOL_MAX ?? (process.env.VERCEL ? "2" : "5");

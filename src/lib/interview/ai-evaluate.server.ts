@@ -5,6 +5,7 @@ import { parseAiEvaluation, parseInPersonFlow, parsePaperAssessment } from "./in
 import { synthesizeCandidateProfile, applyProfileToEvaluation } from "./profile-evaluate.server";
 import { insertEvaluationRun, nextEvaluationRunNumber } from "./evaluation-audit.server";
 import { canonicalQuestionId, loadVersionQuestions } from "./assessment-version.server";
+import { mcqAnswersMatch } from "@/lib/mcq-match.server";
 
 interface QuestionRow {
   id: string;
@@ -13,6 +14,7 @@ interface QuestionRow {
   topic: string | null;
   rubric: string | null;
   correct_answer: string | null;
+  options: string[] | null;
 }
 
 interface AnswerRow {
@@ -32,6 +34,20 @@ function recommendationFromScore(score: number): HireRecommendation {
   if (score >= 65) return "hire";
   if (score >= 50) return "borderline";
   return "no_hire";
+}
+
+function normalizeMcqOptions(raw: unknown): string[] | null {
+  if (raw == null) return null;
+  if (Array.isArray(raw)) return raw.map(String);
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      return Array.isArray(parsed) ? parsed.map(String) : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
 }
 
 function computeWeightedScore(
@@ -217,13 +233,17 @@ export async function evaluateInterviewSession(
         topic: q.topic,
         rubric: q.rubric,
         correct_answer: q.correct_answer,
+        options: q.options,
       }));
     } else {
-      const { rows } = await pool.query<QuestionRow>(
-        `SELECT id, type, prompt, topic, rubric, correct_answer FROM assessment_questions WHERE assessment_id = $1`,
+      const { rows } = await pool.query<QuestionRow & { options: unknown }>(
+        `SELECT id, type, prompt, topic, rubric, correct_answer, options FROM assessment_questions WHERE assessment_id = $1`,
         [session.assessment_id],
       );
-      questions = rows;
+      questions = rows.map((r) => ({
+        ...r,
+        options: normalizeMcqOptions(r.options),
+      }));
     }
 
     const { rows: answers } = await pool.query<AnswerRow>(
@@ -246,8 +266,8 @@ export async function evaluateInterviewSession(
       const given = (answerMap.get(q.id) ?? "").trim();
       if (q.type === "mcq") {
         mcqTotal += 1;
-        const expected = (q.correct_answer ?? "").trim().toLowerCase();
-        const isCorrect = given.toLowerCase() === expected && given.length > 0;
+        const isCorrect =
+          given.length > 0 && mcqAnswersMatch(given, q.correct_answer, q.options);
         if (isCorrect) mcqCorrect += 1;
         const score = isCorrect ? 100 : 0;
         questionEvals.push({

@@ -109,8 +109,6 @@ export function TestBuilder({ preset }: { preset?: TestBuilderPreset }) {
   const [attached, setAttached] = useState(false);
   const [attaching, setAttaching] = useState(false);
   const [savedAssessmentId, setSavedAssessmentId] = useState<string | null>(null);
-  const [seedAppliedFor, setSeedAppliedFor] = useState<string | null>(null);
-
   const runGenerate = useServerFn(generateQuestions);
 
   const { data: allClasses = [] } = useQuery({
@@ -140,16 +138,14 @@ export function TestBuilder({ preset }: { preset?: TestBuilderPreset }) {
   );
 
   useEffect(() => {
-    const key = preset?.classId ?? null;
-    if (!key || !preset || seedAppliedFor === key) return;
+    if (!preset?.classId) return;
     if (preset.className) setAssessmentTitle(`${preset.className} Assessment`);
     if (preset.role) setRole(preset.role);
-    if (preset.classId) {
-      setLinkClassId(preset.classId);
-      setLinkToCourse(true);
-    }
+    setLinkClassId(preset.classId);
+    setLinkToCourse(true);
     setLevel(mapClassDifficulty(preset.difficulty));
     if (presetCount) setCount(presetCount);
+
     if (preset.materialText) {
       setFiles([
         {
@@ -158,15 +154,13 @@ export function TestBuilder({ preset }: { preset?: TestBuilderPreset }) {
           text: preset.materialText,
         },
       ]);
+      if (!preset.questions?.length) setStep(3);
     }
     if (preset.questions?.length) {
       setQuestions(preset.questions);
       setStep(4);
-    } else if (preset.materialText) {
-      setStep(3);
     }
-    if (preset.materialText || preset.questions) setSeedAppliedFor(key);
-  }, [preset, presetCount, seedAppliedFor]);
+  }, [preset, presetCount]);
 
   const handleFiles = async (incoming: FileList | null) => {
     if (!incoming) return;
@@ -186,11 +180,17 @@ export function TestBuilder({ preset }: { preset?: TestBuilderPreset }) {
   const onGenerate = async () => {
     setGenerating(true);
     try {
+      const classIdForGen =
+        preset?.classId || (linkToCourse && linkClassId ? linkClassId : undefined);
       const materialText = files.map((f) => `### ${f.name}\n${f.text}`).join("\n\n");
+      const fileNames = [
+        ...new Set([...files.map((f) => f.name), ...(preset?.fileNames ?? [])]),
+      ];
       const { questions: q } = await runGenerate({
         data: {
           materialText,
-          fileNames: files.map((f) => f.name),
+          fileNames,
+          classId: classIdForGen,
           level,
           role,
           count,

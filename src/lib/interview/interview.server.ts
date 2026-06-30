@@ -15,6 +15,12 @@ import {
   snapshotAssessmentVersion,
   type QuestionOrderSnapshot,
 } from "./assessment-version.server";
+import {
+  INTERVIEW_LIST_DEFAULT_LIMIT,
+  INTERVIEW_LIST_MAX_LIMIT,
+} from "./interview.shared";
+
+export { INTERVIEW_LIST_DEFAULT_LIMIT, INTERVIEW_LIST_MAX_LIMIT };
 
 export interface InterviewSubmissionAnswer {
   question_id: string;
@@ -95,24 +101,53 @@ export async function createInterviewSessionInDb(
   }
 }
 
-export async function listInterviewSessionsFromDb(): Promise<InterviewSessionListItem[]> {
-  const pool = getPgPool();
-  const { rows } = await pool.query<InterviewSessionListItem>(
-    `SELECT s.*, a.title AS assessment_title
-     FROM interview_sessions s
-     JOIN assessments a ON a.id = s.assessment_id
-     ORDER BY s.scheduled_at DESC`,
+export async function listInterviewSessionsFromDb(opts?: {
+  limit?: number;
+  offset?: number;
+}): Promise<{ sessions: InterviewSessionListItem[]; total: number }> {
+  const limit = Math.min(
+    Math.max(opts?.limit ?? INTERVIEW_LIST_DEFAULT_LIMIT, 1),
+    INTERVIEW_LIST_MAX_LIMIT,
   );
-  return rows.map((row) => normalizeSessionRow(row));
+  const offset = Math.max(opts?.offset ?? 0, 0);
+  const pool = getPgPool();
+  const [countRes, listRes] = await Promise.all([
+    pool.query<{ n: string }>(`SELECT count(*)::text AS n FROM interview_sessions`),
+    pool.query<InterviewSessionListItem>(
+      `SELECT s.*, a.title AS assessment_title
+       FROM interview_sessions s
+       JOIN assessments a ON a.id = s.assessment_id
+       ORDER BY s.scheduled_at DESC
+       LIMIT $1 OFFSET $2`,
+      [limit, offset],
+    ),
+  ]);
+  return {
+    sessions: listRes.rows.map((row) => normalizeSessionRow(row)),
+    total: parseInt(countRes.rows[0]?.n ?? "0", 10),
+  };
 }
 
 export async function getInterviewSessionByIdFromDb(
   sessionId: string,
 ): Promise<InterviewSessionListItem | null> {
   const pool = getPgPool();
-  const { rows } = await pool.query<InterviewSessionListItem & { question_count: string }>(
-    `SELECT s.*, a.title AS assessment_title,
-            (SELECT count(*)::text FROM assessment_questions q WHERE q.assessment_id = s.assessment_id) AS question_count
+  const { rows } = await pool.query<
+    InterviewSessionListItem & {
+      question_count: string;
+      assessment_version_id: string | null;
+    }
+  >(
+    `SELECT s.*, a.title AS assessment_title, s.assessment_version_id,
+            CASE
+              WHEN s.assessment_version_id IS NOT NULL THEN (
+                SELECT count(*)::text FROM assessment_version_questions vq
+                WHERE vq.version_id = s.assessment_version_id
+              )
+              ELSE (
+                SELECT count(*)::text FROM assessment_questions q WHERE q.assessment_id = s.assessment_id
+              )
+            END AS question_count
      FROM interview_sessions s
      JOIN assessments a ON a.id = s.assessment_id
      WHERE s.id = $1`,
@@ -130,44 +165,84 @@ export async function getInterviewSubmissionRecordFromDb(
   sessionId: string,
 ): Promise<InterviewSubmissionAnswer[]> {
   const pool = getPgPool();
-  const { rows: sessions } = await pool.query<{ attempt_id: string | null }>(
-    `SELECT attempt_id FROM interview_sessions WHERE id = $1`,
+  const { rows: sessions } = await pool.query<{
+    attempt_id: string | null;
+    assessment_version_id: string | null;
+    assessment_id: string;
+    question_order: QuestionOrderSnapshot | null;
+  }>(
+    `SELECT attempt_id, assessment_version_id, assessment_id, question_order
+     FROM interview_sessions WHERE id = $1`,
     [sessionId],
   );
-  const attemptId = sessions[0]?.attempt_id;
-  if (!attemptId) return [];
+  const sess = sessions[0];
+  if (!sess?.attempt_id) return [];
 
-  const { rows } = await pool.query<{
+  type QRow = {
     question_id: string;
     type: string;
     prompt: string;
     topic: string;
     position: number;
     correct_answer: string | null;
+  };
+
+  let questions: QRow[] = [];
+  if (sess.assessment_version_id) {
+    const versionQs = await loadVersionQuestions(sess.assessment_version_id);
+    questions = versionQs.map((q, i) => ({
+      question_id: canonicalQuestionId(q),
+      type: q.type,
+      prompt: q.prompt,
+      topic: q.topic ?? "",
+      position: q.position ?? i,
+      correct_answer: q.correct_answer,
+    }));
+  } else {
+    const { rows } = await pool.query<QRow>(
+      `SELECT id AS question_id, type, prompt, topic, position, correct_answer
+       FROM assessment_questions WHERE assessment_id = $1 ORDER BY position ASC`,
+      [sess.assessment_id],
+    );
+    questions = rows;
+  }
+
+  const order = sess.question_order?.question_ids;
+  if (order?.length) {
+    const byId = new Map(questions.map((q) => [q.question_id, q]));
+    questions = order
+      .map((id, i) => {
+        const q = byId.get(id);
+        return q ? { ...q, position: i } : null;
+      })
+      .filter((q): q is QRow => q != null);
+  }
+
+  const { rows: answers } = await pool.query<{
+    question_id: string;
     answer: string | null;
     is_correct: boolean | null;
     score: string | null;
   }>(
-    `SELECT q.id AS question_id, q.type, q.prompt, q.topic, q.position, q.correct_answer,
-            aa.answer, aa.is_correct, aa.score
-     FROM assessment_questions q
-     LEFT JOIN attempt_answers aa ON aa.question_id = q.id AND aa.attempt_id = $1
-     JOIN interview_sessions s ON s.assessment_id = q.assessment_id AND s.id = $2
-     ORDER BY q.position ASC`,
-    [attemptId, sessionId],
+    `SELECT question_id, answer, is_correct, score FROM attempt_answers WHERE attempt_id = $1`,
+    [sess.attempt_id],
   );
+  const answerMap = new Map(answers.map((a) => [a.question_id, a]));
 
-  return rows.map((r) => ({
-    question_id: r.question_id,
-    type: r.type as "mcq" | "subjective",
-    prompt: r.prompt,
-    topic: r.topic ?? "",
-    position: r.position ?? 0,
-    answer: r.answer ?? "",
-    is_correct: r.is_correct,
-    score: r.score != null ? Number(r.score) : null,
-    correct_answer: r.correct_answer,
-  }));
+  return questions.map((q) => {
+    const aa = answerMap.get(q.question_id);
+    return {
+      question_id: q.question_id,
+      type: q.type as "mcq" | "subjective",
+      prompt: q.prompt,
+      topic: q.topic,
+      position: q.position,
+      answer: aa?.answer ?? "",
+      is_correct: aa?.is_correct ?? null,
+      score: aa?.score != null ? Number(aa.score) : null,
+      correct_answer: q.correct_answer,
+    };
+  });
 }
 
 export async function validateInterviewAssessmentForSchedule(assessmentId: string): Promise<{
@@ -256,21 +331,63 @@ export async function confirmInterviewIdentityInDb(
 
 export async function getPublicInterviewState(session: InterviewSessionRow): Promise<PublicInterviewState> {
   const pool = getPgPool();
-  const { rows } = await pool.query<{
-    title: string;
-    duration_min: number;
-    question_count: string;
-    attempt_started_at: Date | null;
-  }>(
-    `SELECT a.title, a.duration_min,
-            (SELECT count(*)::text FROM assessment_questions q WHERE q.assessment_id = a.id) AS question_count,
-            att.started_at AS attempt_started_at
-     FROM assessments a
-     LEFT JOIN assessment_attempts att ON att.id = $2
-     WHERE a.id = $1`,
-    [session.assessment_id, session.attempt_id],
-  );
-  const a = rows[0];
+  const versionId = (
+    session as InterviewSessionRow & { assessment_version_id?: string | null }
+  ).assessment_version_id;
+
+  let title = "Interview assessment";
+  let duration_min = 45;
+  let question_count = 0;
+
+  if (versionId) {
+    const { rows } = await pool.query<{
+      title: string;
+      duration_min: number | null;
+      question_count: string;
+    }>(
+      `SELECT av.title, av.duration_min,
+              (SELECT count(*)::text FROM assessment_version_questions vq WHERE vq.version_id = av.id) AS question_count
+       FROM assessment_versions av WHERE av.id = $1`,
+      [versionId],
+    );
+    const v = rows[0];
+    if (v) {
+      title = v.title;
+      duration_min = v.duration_min ?? 45;
+      question_count = parseInt(v.question_count ?? "0", 10);
+    }
+  } else {
+    const { rows } = await pool.query<{
+      title: string;
+      duration_min: number | null;
+      question_count: string;
+    }>(
+      `SELECT a.title, a.duration_min,
+              (SELECT count(*)::text FROM assessment_questions q WHERE q.assessment_id = a.id) AS question_count
+       FROM assessments a WHERE a.id = $1`,
+      [session.assessment_id],
+    );
+    const a = rows[0];
+    if (a) {
+      title = a.title;
+      duration_min = a.duration_min ?? 45;
+      question_count = parseInt(a.question_count ?? "0", 10);
+    }
+  }
+
+  let attempt_started_at: string | null = null;
+  if (session.attempt_id) {
+    const { rows: attRows } = await pool.query<{ started_at: Date | null }>(
+      `SELECT started_at FROM assessment_attempts WHERE id = $1`,
+      [session.attempt_id],
+    );
+    const started = attRows[0]?.started_at;
+    if (started) {
+      attempt_started_at =
+        started instanceof Date ? started.toISOString() : String(started);
+    }
+  }
+
   const toIso = (v: unknown) =>
     v instanceof Date ? v.toISOString() : v != null ? String(v) : "";
   return {
@@ -278,12 +395,12 @@ export async function getPublicInterviewState(session: InterviewSessionRow): Pro
     candidate_name: session.candidate_name,
     scheduled_at: toIso(session.scheduled_at),
     expires_at: toIso(session.expires_at),
-    assessment_title: a?.title ?? "Interview assessment",
-    duration_min: a?.duration_min ?? 45,
-    question_count: parseInt(a?.question_count ?? "0", 10),
+    assessment_title: title,
+    duration_min,
+    question_count,
     role: session.role,
     level: session.level,
-    attempt_started_at: a?.attempt_started_at ? toIso(a.attempt_started_at) : null,
+    attempt_started_at,
   };
 }
 
@@ -439,7 +556,7 @@ export async function getInterviewQuestionsFromDb(
 
 export async function getGradingQuestionsForSession(
   sessionId: string,
-): Promise<{ id: string; type: string; correct_answer: string | null }[]> {
+): Promise<{ id: string; type: string; correct_answer: string | null; options: string[] | null }[]> {
   const pool = getPgPool();
   const { rows: sessRows } = await pool.query<{
     assessment_id: string;
@@ -457,14 +574,25 @@ export async function getGradingQuestionsForSession(
       id: canonicalQuestionId(q),
       type: q.type,
       correct_answer: q.correct_answer,
+      options: q.options,
     }));
   }
 
-  const { rows } = await pool.query<{ id: string; type: string; correct_answer: string | null }>(
-    `SELECT id, type, correct_answer FROM assessment_questions WHERE assessment_id = $1`,
+  const { rows } = await pool.query<{
+    id: string;
+    type: string;
+    correct_answer: string | null;
+    options: unknown;
+  }>(
+    `SELECT id, type, correct_answer, options FROM assessment_questions WHERE assessment_id = $1`,
     [sess.assessment_id],
   );
-  return rows;
+  return rows.map((r) => ({
+    id: r.id,
+    type: r.type,
+    correct_answer: r.correct_answer,
+    options: normalizeOptions(r.options),
+  }));
 }
 
 export async function refreshSessionAssessmentVersionInDb(

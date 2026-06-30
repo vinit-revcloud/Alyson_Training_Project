@@ -15,13 +15,19 @@ export type { BulkInterviewImportResult };
 
 function buildAssessmentTitleMap(
   assessments: Array<{ id: string; title: string }>,
-): Map<string, string> {
+): { map: Map<string, string>; duplicateTitles: string[] } {
   const map = new Map<string, string>();
+  const duplicateTitles: string[] = [];
   for (const a of assessments) {
     const key = a.title.trim().toLowerCase();
-    map.set(key, a.id);
+    if (map.has(key)) {
+      const label = a.title.trim();
+      if (!duplicateTitles.includes(label)) duplicateTitles.push(label);
+    } else {
+      map.set(key, a.id);
+    }
   }
-  return map;
+  return { map, duplicateTitles };
 }
 
 function resolveAssessmentId(
@@ -47,7 +53,12 @@ export async function bulkImportInterviewSessionsInDb(
   createdBy: string,
 ): Promise<BulkInterviewImportResult> {
   const assessments = await listInterviewAssessmentsFromDb();
-  const titleMap = buildAssessmentTitleMap(assessments);
+  const { map: titleMap, duplicateTitles } = buildAssessmentTitleMap(assessments);
+  if (duplicateTitles.length) {
+    throw new Error(
+      `Duplicate interview test titles: ${duplicateTitles.join(", ")}. Rename tests in Interview tests before bulk import, or use unique titles in the spreadsheet.`,
+    );
+  }
 
   const created: BulkInterviewCreatedRow[] = [];
   const failed: BulkInterviewFailedRow[] = [];

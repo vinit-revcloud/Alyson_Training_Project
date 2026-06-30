@@ -25,6 +25,10 @@ export function invalidateClassLifecycleQueries(
     void qc.invalidateQueries({ queryKey: ["class-assessment", opts.classId] });
     void qc.invalidateQueries({ queryKey: ["class-assessment-seed", opts.classId] });
   }
+  void qc.invalidateQueries({ queryKey: ["onboarding-nav"] });
+  void qc.invalidateQueries({ queryKey: ["learner-dashboard"] });
+  void qc.invalidateQueries({ queryKey: ["my-courses"] });
+  void qc.invalidateQueries({ queryKey: ["my-assignments"] });
 }
 
 /** Update class status and run finalize (section questions + optional assessment). */

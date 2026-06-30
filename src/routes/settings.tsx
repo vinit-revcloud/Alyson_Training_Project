@@ -16,6 +16,7 @@ import {
   saveEmailSettingsFn,
   processEmailQueueFn,
 } from "@/lib/email/email-settings.functions";
+import { getAssetStorageInfoFn } from "@/lib/asset.functions";
 import { TRAINING_SENDER_EMAIL } from "@/lib/email/constants";
 import { useState, useEffect } from "react";
 
@@ -27,12 +28,17 @@ export const Route = createFileRoute("/settings")({
 function SettingsPage() {
   const qc = useQueryClient();
   const loadSettings = useServerFn(getEmailSettingsFn);
+  const loadStorage = useServerFn(getAssetStorageInfoFn);
   const saveSettings = useServerFn(saveEmailSettingsFn);
   const processQueue = useServerFn(processEmailQueueFn);
 
   const { data: emailSettings, isLoading, isError, refetch } = useQuery({
     queryKey: ["email-settings"],
     queryFn: () => loadSettings(),
+  });
+  const { data: storageInfo } = useQuery({
+    queryKey: ["asset-storage-info"],
+    queryFn: () => loadStorage(),
   });
 
   const [notifyOnFailure, setNotifyOnFailure] = useState(true);
@@ -94,17 +100,55 @@ function SettingsPage() {
         <Card className="rounded-xl border-border bg-card p-5 shadow-soft">
           <div className="flex items-center gap-2">
             <Cloud className="h-4 w-4 text-primary" />
-            <div className="text-[14px] font-semibold">Storage (S3)</div>
-            <Badge variant="outline" className="ml-auto rounded-md border-success/30 bg-success/10 text-[10px] font-medium text-success">
-              <CheckCircle2 className="mr-1 h-3 w-3" /> Connected
+            <div className="text-[14px] font-semibold">Asset storage</div>
+            <Badge
+              variant="outline"
+              className={`ml-auto rounded-md text-[10px] font-medium ${
+                storageInfo?.usesS3
+                  ? "border-success/30 bg-success/10 text-success"
+                  : "border-border bg-muted text-muted-foreground"
+              }`}
+            >
+              {storageInfo?.usesS3 ? (
+                <>
+                  <CheckCircle2 className="mr-1 h-3 w-3" /> S3
+                </>
+              ) : (
+                storageInfo?.backend ?? "…"
+              )}
             </Badge>
           </div>
           <p className="mt-2 text-[12px] text-muted-foreground">
-            Videos, transcripts and PDFs are uploaded to your S3 bucket.
+            Class PDFs, videos, and transcripts. One file serves learners and AI test generation
+            (text cached in the database).
           </p>
           <div className="mt-4 space-y-3">
-            <Field label="Bucket name" defaultValue="alyson-training-media" />
-            <Field label="Region" defaultValue="us-east-1" />
+            <Field
+              label="Backend"
+              defaultValue={storageInfo?.backend ?? "loading…"}
+              readOnly
+            />
+            <Field
+              label="S3 bucket"
+              defaultValue={storageInfo?.s3Bucket ?? "— (local / legacy blob)"}
+              readOnly
+            />
+            <Field label="Region" defaultValue={storageInfo?.s3Region ?? "—"} readOnly />
+            {storageInfo?.s3Configured ? (
+              <Field
+                label="S3 connection"
+                defaultValue={storageInfo.s3Reachable ? "Reachable" : "Not reachable — check IAM / region"}
+                readOnly
+              />
+            ) : null}
+            {storageInfo?.blobConfigured ? (
+              <Field label="Blob fallback" defaultValue="Configured (read fallback)" readOnly />
+            ) : null}
+            <Field
+              label="Delivery"
+              defaultValue={storageInfo?.delivery ?? "—"}
+              readOnly
+            />
           </div>
         </Card>
 

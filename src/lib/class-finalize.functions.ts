@@ -1,14 +1,15 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import type { Pool } from "pg";
 import { deepseekChatCompletion } from "@/lib/ai/deepseek";
-import { gatherClassMaterial, gatherSectionMaterial } from "@/lib/ai/section-material.server";
+import { gatherClassMaterialPg } from "@/lib/ai/section-material.server";
+import { regenerateSectionQuestionsForSectionPg } from "@/lib/section-questions.server";
 import { requireContentManager } from "@/integrations/neon/auth-middleware";
-import { dbAdmin } from "@/integrations/neon/client.server";
-import type { DbAdminClient } from "@/integrations/neon/client-types";
+import { getPgPool } from "@/lib/pg.server";
+import { formatErrorMessage } from "@/lib/format-error";
+import { autoAssignCourseToDepartmentInDb } from "@/lib/assignments.server";
 import type { Question } from "@/lib/test-types";
 import { TestConfigSchema } from "@/lib/class-create.validation";
-
-type DbClient = DbAdminClient;
 
 export const FinalizeClassInputSchema = z.object({
   classId: z.string().uuid(),
@@ -36,122 +37,23 @@ function levelFromDifficulty(d: string): "Novice" | "Mid-Level" | "Expert" {
   return "Mid-Level";
 }
 
-async function upsertCourseDepartment(
-  supabase: DbClient,
+async function upsertCourseDepartmentPg(
+  pool: Pool,
   courseId: string,
   department: string,
 ): Promise<void> {
-  const { data: existing } = await supabase
-    .from("course_departments")
-    .select("id")
-    .eq("course_id", courseId)
-    .eq("department", department)
-    .maybeSingle();
-  if (!existing) {
-    const { error } = await supabase
-      .from("course_departments")
-      .insert({ course_id: courseId, department });
-    if (error) throw error;
-  }
-}
-
-async function regenerateSectionQuestionsForSection(
-  supabase: DbClient,
-  sectionId: string,
-  difficulty: string,
-  count = 8,
-): Promise<number> {
-  const { data: section, error: secErr } = await supabase
-    .from("sections")
-    .select("id, title, description, objectives")
-    .eq("id", sectionId)
-    .maybeSingle();
-  if (secErr) throw secErr;
-  if (!section) return 0;
-
-  await supabase.from("sections").update({ questions_status: "regenerating" }).eq("id", sectionId);
-
-  try {
-    const { materialText, fileNames } = await gatherSectionMaterial(supabase, section);
-
-    const systemPrompt = `You write assessment questions for a single lesson section. Difficulty target: ${difficulty}. About 70% MCQs (4 options, one correct) and 30% subjective with a short rubric. Base questions strictly on the provided material.`;
-    const userPrompt = `Generate exactly ${count} questions for section "${section.title}".
-
-FILES: ${fileNames.join(", ") || "(none)"}
-
-MATERIAL:
-${materialText.slice(0, 30_000)}
-
-Return ONLY JSON: { "questions": [ { "type": "mcq"|"subjective", "topic": "...", "difficulty": "easy"|"medium"|"hard", "prompt": "...", "options": ["A","B","C","D"], "correctAnswer": "exact text", "rubric": "..." } ] }`;
-
-    const content = await deepseekChatCompletion({
-      system: systemPrompt,
-      user: userPrompt,
-      jsonMode: true,
-    });
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(content);
-    } catch {
-      throw new Error("AI returned malformed JSON for section questions");
-    }
-
-    const rawList = Array.isArray((parsed as { questions?: unknown }).questions)
-      ? (parsed as { questions: unknown[] }).questions
-      : [];
-
-    const rows: Array<{
-      section_id: string;
-      type: string;
-      topic: string;
-      difficulty: string;
-      prompt: string;
-      options: string[] | null;
-      correct_answer: string | null;
-      rubric: string | null;
-      position: number;
-    }> = [];
-
-    rawList.forEach((q, i) => {
-      const r = QuestionSchema.safeParse(q);
-      if (!r.success) return;
-      rows.push({
-        section_id: sectionId,
-        type: r.data.type,
-        topic: r.data.topic,
-        difficulty: r.data.difficulty,
-        prompt: r.data.prompt,
-        options: r.data.options ?? null,
-        correct_answer: r.data.correctAnswer ?? null,
-        rubric: r.data.rubric ?? null,
-        position: i,
-      });
-    });
-
-    await supabase.from("section_questions").delete().eq("section_id", sectionId);
-    if (rows.length > 0) {
-      const { error: insErr } = await supabase.from("section_questions").insert(rows);
-      if (insErr) throw insErr;
-    }
-
-    await supabase
-      .from("sections")
-      .update({
-        questions_status: rows.length > 0 ? "ready" : "empty",
-        questions_updated_at: new Date().toISOString(),
-      })
-      .eq("id", sectionId);
-
-    return rows.length;
-  } catch (err) {
-    await supabase.from("sections").update({ questions_status: "error" }).eq("id", sectionId);
-    throw err;
-  }
+  const trimmed = department.trim();
+  if (!trimmed) return;
+  await pool.query(
+    `INSERT INTO course_departments (course_id, department)
+     VALUES ($1, $2)
+     ON CONFLICT (course_id, department) DO NOTHING`,
+    [courseId, trimmed],
+  );
 }
 
 async function savePrimaryAssessment(
-  supabase: DbClient,
+  pool: Pool,
   input: {
     classId: string;
     title: string;
@@ -164,59 +66,78 @@ async function savePrimaryAssessment(
     questions: Question[];
   },
 ): Promise<string> {
-  const { data: existing } = await supabase
-    .from("assessments")
-    .select("id")
-    .eq("class_id", input.classId)
-    .eq("is_primary", true)
-    .maybeSingle();
+  const existing = await pool.query<{ id: string }>(
+    `SELECT id FROM assessments WHERE class_id = $1 AND is_primary = true LIMIT 1`,
+    [input.classId],
+  );
 
-  const payload = {
-    class_id: input.classId,
-    title: input.title,
-    description: input.description,
-    role: input.role,
-    difficulty: input.difficulty,
-    level: input.level,
-    pass_mark: input.passMark,
-    duration_min: 45,
-    status: input.status,
-    is_primary: true,
-    source: "class_kb",
-    validated_at: new Date().toISOString(),
-    published_at: input.status === "published" ? new Date().toISOString() : null,
-  };
+  const validatedAt = new Date().toISOString();
+  const publishedAt = input.status === "published" ? validatedAt : null;
 
   let assessmentId: string;
-  if (existing?.id) {
-    const { error } = await supabase.from("assessments").update(payload).eq("id", existing.id);
-    if (error) throw error;
-    assessmentId = existing.id;
-    await supabase.from("assessment_questions").delete().eq("assessment_id", assessmentId);
+  if (existing.rows[0]?.id) {
+    assessmentId = existing.rows[0].id;
+    await pool.query(
+      `UPDATE assessments SET
+        title = $2, description = $3, role = $4, difficulty = $5, level = $6,
+        pass_mark = $7, status = $8, source = 'class_kb', validated_at = $9,
+        published_at = $10, updated_at = now()
+       WHERE id = $1`,
+      [
+        assessmentId,
+        input.title,
+        input.description,
+        input.role,
+        input.difficulty,
+        input.level,
+        input.passMark,
+        input.status,
+        validatedAt,
+        publishedAt,
+      ],
+    );
+    await pool.query(`DELETE FROM assessment_questions WHERE assessment_id = $1`, [assessmentId]);
   } else {
-    const { data, error } = await supabase
-      .from("assessments")
-      .insert(payload)
-      .select("id")
-      .single();
-    if (error) throw error;
-    assessmentId = data.id;
+    const ins = await pool.query<{ id: string }>(
+      `INSERT INTO assessments (
+        class_id, title, description, role, difficulty, level, pass_mark,
+        duration_min, status, is_primary, source, validated_at, published_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,45,$8,true,'class_kb',$9,$10)
+      RETURNING id`,
+      [
+        input.classId,
+        input.title,
+        input.description,
+        input.role,
+        input.difficulty,
+        input.level,
+        input.passMark,
+        input.status,
+        validatedAt,
+        publishedAt,
+      ],
+    );
+    assessmentId = ins.rows[0].id;
   }
 
-  if (input.questions.length > 0) {
-    const rows = input.questions.map((q, i) => ({
-      assessment_id: assessmentId,
-      type: q.type,
-      topic: q.topic,
-      difficulty: q.difficulty,
-      prompt: q.prompt,
-      options: q.type === "mcq" ? q.options ?? null : null,
-      correct_answer: q.type === "mcq" ? q.correctAnswer ?? null : null,
-      rubric: q.type === "subjective" ? q.rubric ?? null : null,
-      position: i,
-    }));
-    const { error } = await supabase.from("assessment_questions").insert(rows);
-    if (error) throw error;
+  for (let i = 0; i < input.questions.length; i++) {
+    const q = input.questions[i];
+    await pool.query(
+      `INSERT INTO assessment_questions (
+        assessment_id, type, topic, difficulty, prompt, options, correct_answer, rubric, position
+      ) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9)`,
+      [
+        assessmentId,
+        q.type,
+        q.topic,
+        q.difficulty,
+        q.prompt,
+        q.type === "mcq" ? JSON.stringify(q.options ?? []) : null,
+        q.type === "mcq" ? q.correctAnswer ?? null : null,
+        q.type === "subjective" ? q.rubric ?? null : null,
+        i,
+      ],
+    );
   }
 
   return assessmentId;
@@ -298,31 +219,37 @@ export type FinalizeClassResult = {
 export async function runFinalizeClassCreation(
   data: FinalizeClassInput,
 ): Promise<FinalizeClassResult> {
-  const supabase = dbAdmin;
+  const pool = getPgPool();
   const warnings: string[] = [];
 
-  await upsertCourseDepartment(supabase, data.courseId, data.audience);
+  try {
+    await upsertCourseDepartmentPg(pool, data.courseId, data.audience);
+  } catch (err) {
+    warnings.push(`Course department tag skipped: ${formatErrorMessage(err)}`);
+  }
 
-  const { data: sections } = await supabase
-    .from("sections")
-    .select("id")
-    .eq("class_id", data.classId)
-    .order("position", { ascending: true });
+  const sectionsRes = await pool.query<{ id: string }>(
+    `SELECT id FROM sections WHERE class_id = $1 ORDER BY position ASC`,
+    [data.classId],
+  );
+  const sections = sectionsRes.rows;
 
   let sectionQuestionCount = 0;
   if (data.generateSectionQuestions) {
-    for (const sec of sections ?? []) {
+    for (const sec of sections) {
       try {
-        sectionQuestionCount += await regenerateSectionQuestionsForSection(
-          supabase,
+        sectionQuestionCount += await regenerateSectionQuestionsForSectionPg(
+          pool,
           sec.id,
           data.test.difficulty,
         );
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = formatErrorMessage(err);
         console.error(`[finalize] section questions failed for ${sec.id}:`, msg);
         warnings.push(`Section questions skipped for one lesson: ${msg}`);
-        await supabase.from("sections").update({ questions_status: "error" }).eq("id", sec.id);
+        await pool
+          .query(`UPDATE sections SET questions_status = 'error' WHERE id = $1`, [sec.id])
+          .catch(() => undefined);
       }
     }
   }
@@ -332,15 +259,15 @@ export async function runFinalizeClassCreation(
 
   const shouldGenerateAssessment = data.generateAssessment || data.status === "published";
 
-  if (shouldGenerateAssessment && (sections?.length ?? 0) > 0) {
+  if (shouldGenerateAssessment && sections.length > 0) {
     try {
-      const { data: cls } = await supabase
-        .from("classes")
-        .select("name, summary")
-        .eq("id", data.classId)
-        .maybeSingle();
+      const clsRes = await pool.query<{ name: string; summary: string | null }>(
+        `SELECT name, summary FROM classes WHERE id = $1`,
+        [data.classId],
+      );
+      const cls = clsRes.rows[0];
 
-      const { materialText, fileNames } = await gatherClassMaterial(supabase, data.classId);
+      const { materialText, fileNames } = await gatherClassMaterialPg(data.classId, pool);
       const totalCount = Math.min(60, Math.max(5, data.test.mcqCount + data.test.subjectiveCount));
       const level = levelFromDifficulty(data.test.difficulty);
       const questions = await generateFinalAssessmentQuestions(
@@ -354,7 +281,7 @@ export async function runFinalizeClassCreation(
 
       if (questions.length > 0) {
         const assessmentStatus = data.status === "published" ? "published" : "validated";
-        assessmentId = await savePrimaryAssessment(supabase, {
+        assessmentId = await savePrimaryAssessment(pool, {
           classId: data.classId,
           title: `${cls?.name ?? "Class"} — Final Assessment`,
           description: cls?.summary ?? "",
@@ -369,9 +296,29 @@ export async function runFinalizeClassCreation(
         warnings.push("Final assessment was not generated — add questions manually in Assessments.");
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = formatErrorMessage(err);
       console.error("[finalize] final assessment failed:", msg);
       warnings.push(`Final assessment generation failed: ${msg}`);
+    }
+  }
+
+  if (data.status === "published" && data.audience.trim()) {
+    try {
+      const assignResult = await autoAssignCourseToDepartmentInDb(
+        data.courseId,
+        data.audience.trim(),
+      );
+      if (assignResult.assignmentsCreated > 0) {
+        console.info(
+          `[finalize] auto-assigned ${assignResult.assignmentsCreated} assessment(s) to ${assignResult.usersTouched} trainee(s)`,
+        );
+      } else if (assignResult.usersTouched === 0) {
+        warnings.push(
+          `No trainees with department "${data.audience}" — set department on user profiles or use Assignments to assign manually.`,
+        );
+      }
+    } catch (err) {
+      warnings.push(`Assessment auto-assign skipped: ${formatErrorMessage(err)}`);
     }
   }
 

@@ -1,5 +1,8 @@
 export type AssessmentMode = "online" | "paper_only" | "hybrid";
 
+export const INTERVIEW_LIST_DEFAULT_LIMIT = 100;
+export const INTERVIEW_LIST_MAX_LIMIT = 500;
+
 export const ASSESSMENT_MODE_LABELS: Record<AssessmentMode, string> = {
   online: "Online (magic link)",
   paper_only: "Paper only",

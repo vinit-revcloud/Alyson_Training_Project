@@ -31,25 +31,91 @@ function embedUrl(url: string): string | null {
   return null;
 }
 
-function SignedVideo({ bucket, storagePath }: { bucket: AssetBucket; storagePath: string }) {
+function SignedMedia({
+  bucket,
+  storagePath,
+  kind,
+  label,
+}: {
+  bucket: AssetBucket;
+  storagePath: string;
+  kind: "video" | "document";
+  label: string;
+}) {
   const [src, setSrc] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
   useEffect(() => {
     let cancelled = false;
+    setFailed(false);
+    setSrc(null);
     void getSignedAssetUrlFn({ data: { bucket, storagePath } })
       .then(({ url }) => {
         if (!cancelled) setSrc(url);
       })
       .catch(() => {
-        if (!cancelled) setSrc(null);
+        if (!cancelled) setFailed(true);
       });
     return () => {
       cancelled = true;
     };
   }, [bucket, storagePath]);
-  if (!src) return <div className="aspect-video animate-pulse rounded-[10px] bg-muted" />;
+
+  if (failed) {
+    return (
+      <div className="rounded-[10px] border border-dashed border-[var(--learn-border)] bg-muted/40 p-4 text-sm text-muted-foreground">
+        Document unavailable. Ask your trainer to re-upload this file.
+      </div>
+    );
+  }
+
+  if (!src) {
+    return (
+      <div
+        className={
+          kind === "video"
+            ? "aspect-video animate-pulse rounded-[10px] bg-muted"
+            : "h-24 animate-pulse rounded-[10px] bg-muted"
+        }
+      />
+    );
+  }
+
+  if (kind === "video") {
+    return (
+      <video
+        src={src}
+        controls
+        className="aspect-video w-full rounded-[10px] border border-[var(--learn-border)] bg-black"
+      />
+    );
+  }
+
+  const isPdf = label.toLowerCase().includes(".pdf") || src.toLowerCase().includes(".pdf");
   return (
-    <video src={src} controls className="aspect-video w-full rounded-[10px] border border-[var(--learn-border)] bg-black" />
+    <div className="learn-card rounded-[10px] border border-[var(--learn-border)] p-4">
+      <a
+        href={src}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex items-center gap-2 text-sm font-medium text-[var(--learn-accent)] hover:underline"
+      >
+        <FileText className="h-4 w-4" />
+        {label || "Document"}
+        <ExternalLink className="h-3 w-3" />
+      </a>
+      {isPdf ? (
+        <iframe
+          src={src}
+          title={label}
+          className="mt-3 h-96 w-full rounded-lg border border-[var(--learn-border)]"
+        />
+      ) : null}
+    </div>
   );
+}
+
+function SignedVideo({ bucket, storagePath }: { bucket: AssetBucket; storagePath: string }) {
+  return <SignedMedia bucket={bucket} storagePath={storagePath} kind="video" label="Video" />;
 }
 
 function SectionAssetBlock({
@@ -88,7 +154,18 @@ function SectionAssetBlock({
     );
   }
 
-  if (kind === "document" && url) {
+  if (kind === "document") {
+    if (asset.storageBucket && asset.storagePath) {
+      return (
+        <SignedMedia
+          bucket={asset.storageBucket as AssetBucket}
+          storagePath={asset.storagePath}
+          kind="document"
+          label={asset.label}
+        />
+      );
+    }
+    if (!url) return null;
     const isPdf = url.toLowerCase().includes(".pdf") || asset.label.toLowerCase().includes("pdf");
     return (
       <div className="learn-card rounded-[10px] border border-[var(--learn-border)] p-4">

@@ -213,7 +213,9 @@ function NewClassWizard() {
     })),
   });
 
-  const persist = async (status: ClassStatus): Promise<{ courseId: string; classId: string } | null> => {
+  const persist = async (
+    status: ClassStatus,
+  ): Promise<{ courseId: string; classId: string; finalizeWarnings?: string[] } | null> => {
     const normalizedTest = normalizeTestConfig(test);
 
     if (status === "draft") {
@@ -246,32 +248,45 @@ function NewClassWizard() {
       }
 
       setFinalizing(true);
-      const aiResult = await finalizeClass({
-        classId,
-        courseId,
-        audience,
-        status,
-        test: {
-          difficulty: normalizedTest.difficulty,
-          mcqCount: normalizedTest.mcqCount,
-          subjectiveCount: normalizedTest.subjectiveCount,
-          passMark: normalizedTest.passMark,
-        },
-        generateSectionQuestions: true,
-        generateAssessment: status === "published",
-      });
+      const finalizeWarnings: string[] = [];
+      try {
+        const aiResult = await finalizeClass({
+          classId,
+          courseId,
+          audience,
+          status,
+          test: {
+            difficulty: normalizedTest.difficulty,
+            mcqCount: normalizedTest.mcqCount,
+            subjectiveCount: normalizedTest.subjectiveCount,
+            passMark: normalizedTest.passMark,
+          },
+          generateSectionQuestions: true,
+          generateAssessment: status === "published",
+        });
+        if (aiResult.sectionQuestionCount > 0 || aiResult.assessmentQuestionCount > 0) {
+          toast.message("AI knowledge base processed", {
+            description: `${aiResult.sectionQuestionCount} section questions · ${aiResult.assessmentQuestionCount} final test questions`,
+          });
+        }
+        if (aiResult.warnings?.length) {
+          finalizeWarnings.push(...aiResult.warnings);
+        }
+      } catch (e) {
+        finalizeWarnings.push(formatErrorMessage(e));
+      }
+
       invalidateClassLifecycleQueries(qc, { courseId, classId });
-      if (aiResult.sectionQuestionCount > 0 || aiResult.assessmentQuestionCount > 0) {
-        toast.message("AI knowledge base processed", {
-          description: `${aiResult.sectionQuestionCount} section questions · ${aiResult.assessmentQuestionCount} final test questions`,
+      if (finalizeWarnings.length) {
+        toast.warning("Class saved — AI step had issues", {
+          description: finalizeWarnings[0],
         });
       }
-      if (aiResult.warnings?.length) {
-        toast.warning("Class saved with AI warnings", {
-          description: aiResult.warnings[0],
-        });
-      }
-      return { courseId, classId };
+      return {
+        courseId,
+        classId,
+        finalizeWarnings: finalizeWarnings.length ? finalizeWarnings : undefined,
+      };
     } catch (e) {
       toast.error("Could not save class", {
         description: formatErrorMessage(e),
@@ -324,7 +339,9 @@ function NewClassWizard() {
     }
     const result = await persist("published");
     if (result) {
-      toast.success("Class published", { description: `"${className}" is live in ${parentCourse}.` });
+      if (!result.finalizeWarnings?.length) {
+        toast.success("Class published", { description: `"${className}" is live in ${parentCourse}.` });
+      }
       navigate({ to: "/courses/$courseId", params: { courseId: result.courseId } });
     }
   };
@@ -392,7 +409,7 @@ function NewClassWizard() {
           <Button
             variant="outline"
             onClick={saveDraft}
-            disabled={submitting}
+            disabled={submitting || finalizing}
             className="h-9 gap-1.5 rounded-lg border-border text-[12.5px]"
           >
             <Check className="h-3.5 w-3.5" /> Save draft
@@ -531,10 +548,10 @@ function NewClassWizard() {
             <div className="flex items-center gap-2">
               {step === STEPS.length - 1 ? (
                 <>
-                  <Button variant="outline" onClick={submitForApproval} disabled={submitting} className="h-10 gap-2 rounded-lg border-border">
+                  <Button variant="outline" onClick={submitForApproval} disabled={submitting || finalizing} className="h-10 gap-2 rounded-lg border-border">
                     <Send className="h-4 w-4" /> Submit for approval
                   </Button>
-                  <Button onClick={publishNow} disabled={allIssues.length > 0 || submitting} className="h-10 gap-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary-glow">
+                  <Button onClick={publishNow} disabled={allIssues.length > 0 || submitting || finalizing} className="h-10 gap-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary-glow">
                     <Sparkles className="h-4 w-4" />{" "}
                     {finalizing ? "Generating tests…" : submitting ? "Saving…" : "Publish now"}
                   </Button>

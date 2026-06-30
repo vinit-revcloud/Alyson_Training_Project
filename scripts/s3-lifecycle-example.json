@@ -1,0 +1,16 @@
+{
+  "Rules": [
+    {
+      "ID": "ArchiveOldClassDocuments",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "class-documents/" },
+      "Transitions": [
+        {
+          "Days": 180,
+          "StorageClass": "GLACIER_IR"
+        }
+      ],
+      "NoncurrentVersionExpiration": { "NoncurrentDays": 30 }
+    }
+  ]
+}

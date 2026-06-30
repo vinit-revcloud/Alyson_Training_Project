@@ -175,15 +175,18 @@ async function assertLearnerTrainee(client: PoolClient, userId: string): Promise
 }
 
 async function assertAssessmentAssignable(client: PoolClient, assessmentId: string): Promise<void> {
-  const { rows } = await client.query<{ ok: boolean }>(
-    `SELECT EXISTS (
-       SELECT 1 FROM assessments
-       WHERE id = $1 AND status IN ('validated', 'published')
-     ) AS ok`,
+  const { rows } = await client.query<{ status: string; purpose: string }>(
+    `SELECT status, purpose FROM assessments WHERE id = $1`,
     [assessmentId],
   );
-  if (!rows[0]?.ok) {
+  const row = rows[0];
+  if (!row || !["validated", "published"].includes(row.status)) {
     throw new Error("Test must be validated or published before assignment");
+  }
+  if (row.purpose === "interview") {
+    throw new Error(
+      "Interview assessments cannot be assigned to trainees — schedule them from Interviews",
+    );
   }
 }
 

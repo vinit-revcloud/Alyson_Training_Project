@@ -153,7 +153,21 @@ function BuilderPage() {
               <span>{classSeed?.assetCount ?? 0} uploaded assets</span>
               <span>·</span>
               <span>{classSeed?.questions.length ?? 0} saved section questions</span>
+              {!loadingSeed && classSeed ? (
+                <>
+                  <span>·</span>
+                  <span>
+                    {classSeed.materialText.length.toLocaleString()} chars of knowledge base
+                  </span>
+                </>
+              ) : null}
             </div>
+          ) : null}
+          {!loadingSeed && classSeed && classSeed.materialText.length < 500 ? (
+            <p className="mt-2 text-[11px] font-medium text-amber-800">
+              Knowledge base looks empty — re-upload PDFs on the class page or confirm files exist in
+              storage. Generation will fall back to generic topics until material is available.
+            </p>
           ) : null}
           <p className="mt-2 text-[11px] text-muted-foreground">
             Use these as your starting parameters in Profile + Generate steps below.

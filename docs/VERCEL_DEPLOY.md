@@ -60,7 +60,9 @@ In **Project Settings → Environment Variables**, add these for **Production** 
 | `APP_BASE_URL` | Your production URL, e.g. `https://alyson-training.vercel.app` or custom domain **without trailing slash**. Required for correct email/magic links on a custom domain. |
 | `AWS_ACCESS_KEY_ID` | SES IAM user |
 | `AWS_SECRET_ACCESS_KEY` | SES IAM secret |
-| `AWS_REGION` | `us-east-1` (SES) |
+| `AWS_REGION` | `us-west-2` (SES — same region as verified identity) |
+| `SES_REGION` | Optional — `us-west-2` if set explicitly |
+| `S3_ASSETS_REGION` | `us-west-2` (S3 bucket region) |
 | `DEEPSEEK_API_KEY` and/or `OPENROUTER_API_KEY` | At least one required |
 | `NODE_ENV` | `production` |
 
@@ -203,7 +205,7 @@ Until then, **online interview tests** and **bulk candidate scheduling** work fu
 
 ### Multi-region AWS
 
-SES is `us-east-1`; Lambda workflow (optional) is `us-west-2`. Ensure IAM allows both.
+SES, S3, and the optional assignment Lambda workflow all use **`us-west-2` (Oregon)**. Set `AWS_REGION`, `SES_REGION`, and `S3_ASSETS_REGION` consistently on Vercel.
 
 ---
 

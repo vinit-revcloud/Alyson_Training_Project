@@ -38,7 +38,8 @@ Copy `.env.example` to `.env` for local dev. **Never commit `.env`** (it is giti
 | `ASSET_SIGNING_SECRET` | Optional | Separate HMAC secret for asset URLs (defaults to `CRON_SECRET`) |
 | `APP_BASE_URL` | Yes | Public HTTPS origin (email links, cron) |
 | `BOOTSTRAP_ADMIN_EMAILS` | Optional | Comma-separated initial admins; **empty in production** after bootstrap |
-| `AWS_REGION` | Yes | SES region (default `us-east-1`) |
+| `AWS_REGION` | Yes | SES region (`us-west-2` — must match verified identity) |
+| `SES_REGION` | Optional | Overrides `AWS_REGION` for SES only (use if split regions) |
 | `AWS_ACCESS_KEY_ID` | Yes | IAM user for SES |
 | `AWS_SECRET_ACCESS_KEY` | Yes | IAM secret |
 | `SES_FROM_NAME` | Yes | Display name (`Cintara Training`) — From address is hardcoded |

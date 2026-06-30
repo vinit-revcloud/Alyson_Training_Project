@@ -15,7 +15,7 @@ Single Lambda for the Alyson Training assignment email workflow. Routes on `even
 | Lambda | `alyson-training-email-send-lambda` |
 | State machine | `alyson-training-email-send-state-machine` |
 | Lambda region | `us-west-2` |
-| SES region | `us-east-1` |
+| SES region | `us-west-2` (same as app — identity `training.group@cintara.ai`) |
 
 ## Deploy
 
@@ -35,7 +35,7 @@ Configure the Lambda handler in AWS as **`index.handler`**.
 |----------|----------|-------------|
 | `STATE_MACHINE_ARN` | Yes | ARN of `alyson-training-email-send-state-machine` |
 | `DATABASE_URL` | Yes | Neon Postgres connection string |
-| `SES_REGION` | Yes | `us-east-1` (where SES identity is verified) |
+| `SES_REGION` | Yes | `us-west-2` (must match verified SES identity region) |
 | `SES_FROM_EMAIL` | Yes | `training.group@cintara.ai` |
 | `SES_FROM_NAME` | No | `Cintara Training` |
 | `SES_CONFIGURATION_SET` | No | `alyson-training` |
@@ -49,7 +49,7 @@ Configure the Lambda handler in AWS as **`index.handler`**.
 
 **Lambda execution role:**
 
-- `ses:SendEmail`, `ses:SendTemplatedEmail` (SES in `us-east-1`)
+- `ses:SendEmail`, `ses:SendTemplatedEmail` (SES in `us-west-2`)
 - `states:StartExecution` on the state machine ARN
 - `logs:CreateLogGroup`, `logs:CreateLogStream`, `logs:PutLogEvents`
 

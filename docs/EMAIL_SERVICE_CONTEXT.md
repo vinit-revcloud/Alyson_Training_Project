@@ -61,7 +61,7 @@ Assignment created / retake needed
 | Verified sender | `training.group@cintara.ai` |
 | Display name | `Cintara Training` (`SES_FROM_NAME`) |
 | Configuration set | `alyson-training` |
-| Region | `us-east-1` (default) |
+| Region | `us-west-2` (default) — set `AWS_REGION` / `SES_REGION` |
 | Bounce webhook | `POST /api/webhooks/ses` (SNS verify) |
 
 ### SES templates (Lambda uses these — not DB `email_templates`)

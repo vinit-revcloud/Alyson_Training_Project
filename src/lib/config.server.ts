@@ -10,6 +10,27 @@ function isProduction(): boolean {
   return process.env.NODE_ENV === "production";
 }
 
+/** Default AWS region — SES identity and S3 bucket are in us-west-2 (Oregon). */
+export const DEFAULT_AWS_REGION = "us-west-2";
+
+/** SES send region — prefer SES_REGION, then AWS_REGION. */
+export function getSesRegion(): string {
+  return (
+    process.env.SES_REGION?.trim() ||
+    process.env.AWS_REGION?.trim() ||
+    DEFAULT_AWS_REGION
+  );
+}
+
+/** S3 bucket region — prefer S3_ASSETS_REGION, then AWS_REGION. */
+export function getS3AssetsRegion(): string {
+  return (
+    process.env.S3_ASSETS_REGION?.trim() ||
+    process.env.AWS_REGION?.trim() ||
+    DEFAULT_AWS_REGION
+  );
+}
+
 /** Comma-separated @cintara.ai emails that receive admin+trainer without an invite (initial setup only). */
 export function getBootstrapAdminEmails(): string[] {
   const raw = process.env.BOOTSTRAP_ADMIN_EMAILS?.trim();
@@ -64,6 +85,19 @@ export function assertProductionConfig(): void {
   if (!process.env.AWS_ACCESS_KEY_ID?.trim() || !process.env.AWS_SECRET_ACCESS_KEY?.trim()) {
     issues.push("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are required in production");
   }
+  if (!process.env.S3_ASSETS_BUCKET?.trim()) {
+    const blobOnly =
+      process.env.BLOB_READ_WRITE_TOKEN?.trim() &&
+      getConfiguredAssetStorageBackend() === "vercel-blob";
+    if (!blobOnly) {
+      issues.push("S3_ASSETS_BUCKET is required in production for class PDFs and media");
+    }
+  }
+  if (process.env.VERCEL && getConfiguredAssetStorageBackend() === "local-disk") {
+    issues.push(
+      "On Vercel, local disk storage is ephemeral — set S3_ASSETS_BUCKET or BLOB_READ_WRITE_TOKEN",
+    );
+  }
   if (!getDeepSeekApiKey() && !getOpenRouterApiKey()) {
     issues.push("DEEPSEEK_API_KEY or OPENROUTER_API_KEY is required in production");
   }
@@ -78,13 +112,38 @@ export function assertProductionConfig(): void {
 
 export function getSesConfig() {
   return {
-    region: process.env.AWS_REGION ?? "us-east-1",
+    region: getSesRegion(),
     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
     /** Display name only — From address is always training.group@cintara.ai */
     fromName: process.env.SES_FROM_NAME ?? "Cintara Training",
     configurationSet: process.env.SES_CONFIGURATION_SET,
   };
+}
+
+export function getS3AssetsConfig() {
+  const ses = getSesConfig();
+  const prefix = process.env.S3_ASSETS_PREFIX?.trim().replace(/^\//, "").replace(/\/$/, "");
+  return {
+    bucket: process.env.S3_ASSETS_BUCKET?.trim() || undefined,
+    keyPrefix: prefix || undefined,
+    region: getS3AssetsRegion(),
+    accessKeyId: ses.accessKeyId,
+    secretAccessKey: ses.secretAccessKey,
+  };
+}
+
+export type AssetStorageBackendKind = "s3" | "vercel-blob" | "local-disk";
+
+/** Resolved asset storage backend (see asset-storage.server.ts). */
+export function getConfiguredAssetStorageBackend(): AssetStorageBackendKind {
+  const explicit = process.env.ASSET_STORAGE_BACKEND?.trim().toLowerCase();
+  if (explicit === "s3") return "s3";
+  if (explicit === "local" || explicit === "local-disk") return "local-disk";
+  if (explicit === "blob" || explicit === "vercel-blob") return "vercel-blob";
+  if (process.env.S3_ASSETS_BUCKET?.trim() && isProduction()) return "s3";
+  if (process.env.BLOB_READ_WRITE_TOKEN?.trim()) return "vercel-blob";
+  return "local-disk";
 }
 
 export function getDeepSeekApiKey(): string | undefined {

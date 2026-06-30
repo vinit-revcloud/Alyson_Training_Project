@@ -35,6 +35,7 @@ import {
   validateInterviewAssessmentForSchedule,
 } from "./interview.server";
 import { evaluateInterviewSession } from "./ai-evaluate.server";
+import { queueInterviewEvaluation } from "./interview-eval-queue.server";
 import { ensureInterviewProfileReport } from "./profile-evaluate.server";
 import { gradePaperAssessment } from "./paper-grade.server";
 import {
@@ -43,6 +44,7 @@ import {
   sendInterviewInviteEmail,
 } from "./interview-email.server";
 import { getPgPool } from "@/lib/pg.server";
+import { mcqAnswersMatch } from "@/lib/mcq-match.server";
 
 const TokenInput = z.object({ token: z.string().min(16).max(128) });
 const SessionIdInput = z.object({ sessionId: z.string().uuid() });
@@ -137,9 +139,18 @@ export const createInterviewSessionFn = createServerFn({ method: "POST" })
     };
   });
 
-export const listInterviewSessionsFn = createServerFn({ method: "GET" })
+export const listInterviewSessionsFn = createServerFn({ method: "POST" })
   .middleware([requireHiringRead])
-  .handler(async () => listInterviewSessionsFromDb());
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        limit: z.number().int().min(1).max(500).optional(),
+        offset: z.number().int().min(0).optional(),
+      })
+      .optional()
+      .parse(d ?? {}),
+  )
+  .handler(async ({ data }) => listInterviewSessionsFromDb(data ?? {}));
 
 export const listInterviewAssessmentsFn = createServerFn({ method: "GET" })
   .middleware([requireHiringRead])
@@ -536,9 +547,9 @@ export const submitInterviewAttemptFn = createServerFn({ method: "POST" })
         let isCorrect: boolean | null = null;
         if (q.type === "mcq") {
           mcqTotal += 1;
-          const given = answer.trim().toLowerCase();
-          const expected = (q.correct_answer ?? "").trim().toLowerCase();
-          isCorrect = given.length > 0 && given === expected;
+          isCorrect =
+            answer.trim().length > 0 &&
+            mcqAnswersMatch(answer, q.correct_answer, q.options);
           if (isCorrect) mcqCorrect += 1;
         }
         await client.query(
@@ -561,16 +572,9 @@ export const submitInterviewAttemptFn = createServerFn({ method: "POST" })
 
       await notifyInterviewSubmitted(sessionId);
 
-      let evalError: string | undefined;
-      try {
-        await evaluateInterviewSession(sessionId);
-        await notifyInterviewEvaluated(sessionId);
-      } catch (e) {
-        evalError = e instanceof Error ? e.message : String(e);
-        console.error("[interview] AI evaluation failed", e);
-      }
+      queueInterviewEvaluation(sessionId);
 
-      return { mcqScore, submitted: true, evalError };
+      return { mcqScore, submitted: true, evaluationQueued: true };
     } catch (e) {
       await client.query("ROLLBACK");
       throw e;

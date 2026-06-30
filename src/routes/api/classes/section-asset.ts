@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { assertContentManager } from "@/lib/content-manager.server";
 import { insertSectionAssetInDb } from "@/lib/classes.server";
+import { cacheExtractedTextForSectionAsset } from "@/lib/asset-extract-cache.server";
 import { userFromRequest } from "@/lib/auth-token.server";
 
 const BodySchema = z.object({
@@ -27,6 +28,17 @@ export const Route = createFileRoute("/api/classes/section-asset")({
           await assertContentManager(authUser.id);
           const body = BodySchema.parse(await request.json());
           const id = await insertSectionAssetInDb(body);
+          try {
+            await cacheExtractedTextForSectionAsset({
+              assetId: id,
+              kind: body.kind,
+              fileName: body.fileName,
+              storageBucket: body.storageBucket ?? null,
+              storagePath: body.storagePath ?? null,
+            });
+          } catch {
+            /* extraction is best-effort; gatherSectionMaterial will retry */
+          }
           return Response.json({ id });
         } catch (err) {
           if (err instanceof z.ZodError) {

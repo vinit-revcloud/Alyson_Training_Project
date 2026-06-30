@@ -226,7 +226,7 @@ export function downloadBulkInterviewTemplate(assessments: InterviewAssessmentRe
       tip: "Required: candidate_name, candidate_email, job_title. Optional: level, assessment_title, scheduled_at, expires_at, assessment_mode.",
     },
     {
-      tip: "assessment_title must match a test listed on Available tests (or leave blank and pick a default in the upload dialog).",
+      tip: "assessment_title must match a unique test title on Available tests (duplicate titles are rejected at import).",
     },
     {
       tip: "assessment_mode: online | paper_only | hybrid. Dates accept ISO text or Excel date cells.",

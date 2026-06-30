@@ -6,6 +6,7 @@ import {
   runFinalizeClassCreation,
 } from "@/lib/class-finalize.functions";
 import { userFromRequest } from "@/lib/auth-token.server";
+import { formatErrorMessage } from "@/lib/format-error";
 
 export const Route = createFileRoute("/api/classes/finalize")({
   server: {
@@ -21,7 +22,7 @@ export const Route = createFileRoute("/api/classes/finalize")({
           if (err instanceof z.ZodError) {
             return Response.json({ error: "Invalid request body" }, { status: 400 });
           }
-          const message = err instanceof Error ? err.message : "Finalize class failed";
+          const message = formatErrorMessage(err);
           const status = message.includes("Unauthorized")
             ? 401
             : message.includes("Not authorized") || message.includes("Forbidden")

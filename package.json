@@ -40,12 +40,17 @@
     "db:apply-onboarding-learner-v2": "node scripts/apply-onboarding-learner-panel-v2.mjs",
     "db:apply-onboarding-email-templates": "node scripts/apply-onboarding-email-templates.mjs",
     "db:apply-policy-pdf": "node scripts/apply-onboarding-policy-pdf.mjs",
+    "assets:migrate-s3": "node scripts/migrate-assets-to-s3.mjs",
+    "assets:test-s3": "node scripts/test-s3-assets.mjs",
+    "courses:promote-published": "node scripts/promote-published-courses.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
     "@aws-sdk/client-lambda": "^3.1070.0",
+    "@aws-sdk/client-s3": "^3.1075.0",
     "@aws-sdk/client-sesv2": "^3.1063.0",
+    "@aws-sdk/s3-request-presigner": "^3.1075.0",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",

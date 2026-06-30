@@ -31,7 +31,11 @@ function loadEnv() {
 
 loadEnv();
 
-const region = process.env.AWS_REGION ?? "us-east-1";
+const DEFAULT_AWS_REGION = "us-west-2";
+const region =
+  process.env.SES_REGION?.trim() ||
+  process.env.AWS_REGION?.trim() ||
+  DEFAULT_AWS_REGION;
 const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
 const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
 const cronSecret = process.env.CRON_SECRET;
@@ -48,7 +52,9 @@ if (missing.length) {
 }
 
 console.log("Config:");
-console.log("  AWS_REGION:", region);
+console.log("  SES_REGION:", process.env.SES_REGION ?? "(use AWS_REGION)");
+console.log("  AWS_REGION:", process.env.AWS_REGION ?? "(default us-west-2)");
+console.log("  Effective SES region:", region);
 console.log("  SES_FROM: training.group@cintara.ai");
 console.log("  SES_CONFIGURATION_SET:", process.env.SES_CONFIGURATION_SET ?? "(none)");
 console.log("  CRON_SECRET: set");

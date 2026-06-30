@@ -4,7 +4,7 @@ let sesClient;
 
 function getSesClient() {
   if (!sesClient) {
-    sesClient = new SESv2Client({ region: process.env.SES_REGION || "us-east-1" });
+    sesClient = new SESv2Client({ region: process.env.SES_REGION || process.env.AWS_REGION || "us-west-2" });
   }
   return sesClient;
 }

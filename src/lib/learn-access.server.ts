@@ -16,12 +16,18 @@ export async function getAccessibleCourseIdsForUser(userId: string): Promise<Set
     ),
     dept
       ? pool.query<{ course_id: string }>(
-          `SELECT course_id FROM course_departments WHERE department = $1`,
+          `SELECT cd.course_id
+           FROM course_departments cd
+           JOIN courses c ON c.id = cd.course_id
+           WHERE cd.department = $1 AND c.status = 'published'`,
           [dept],
         )
       : Promise.resolve({ rows: [] as { course_id: string }[] }),
     pool.query<{ course_id: string }>(
-      `SELECT course_id FROM learner_path_assignments WHERE user_id = $1`,
+      `SELECT lpa.course_id
+       FROM learner_path_assignments lpa
+       JOIN courses c ON c.id = lpa.course_id
+       WHERE lpa.user_id = $1 AND c.status = 'published'`,
       [userId],
     ),
   ]);

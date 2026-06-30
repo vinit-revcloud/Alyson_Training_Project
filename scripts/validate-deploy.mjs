@@ -89,6 +89,31 @@ if (!env("DEEPSEEK_API_KEY") && !env("OPENROUTER_API_KEY")) {
   errors.push("Set DEEPSEEK_API_KEY and/or OPENROUTER_API_KEY");
 }
 
+const awsRegion = env("AWS_REGION") || "us-west-2";
+const sesRegion = env("SES_REGION") || awsRegion;
+if (env("AWS_REGION") && env("SES_REGION") && env("AWS_REGION") !== env("SES_REGION")) {
+  warnings.push("AWS_REGION and SES_REGION differ — SES sends use SES_REGION");
+}
+if (env("S3_ASSETS_REGION") && env("AWS_REGION") && env("S3_ASSETS_REGION") !== env("AWS_REGION")) {
+  warnings.push(
+    `S3_ASSETS_REGION (${env("S3_ASSETS_REGION")}) differs from AWS_REGION (${env("AWS_REGION")}) — S3 client uses S3_ASSETS_REGION`,
+  );
+}
+const lambdaArn = env("EMAIL_WORKFLOW_LAMBDA_ARN");
+if (lambdaArn && lambdaArn.includes("ACCOUNT_ID")) {
+  warnings.push("EMAIL_WORKFLOW_LAMBDA_ARN still contains ACCOUNT_ID placeholder");
+}
+if (lambdaArn && !lambdaArn.includes(":us-west-2:") && lambdaArn.startsWith("arn:aws:lambda:")) {
+  warnings.push(
+    `EMAIL_WORKFLOW_LAMBDA_ARN is not in us-west-2 — expected Oregon to match this project's defaults`,
+  );
+}
+if (isProdCheck && sesRegion !== "us-west-2" && !env("SES_REGION")) {
+  warnings.push(
+    `SES effective region is ${sesRegion} — verify training.group@cintara.ai is verified in that region`,
+  );
+}
+
 if (isProdCheck && env("BOOTSTRAP_ADMIN_EMAILS").includes("admin@cintara.ai")) {
   warnings.push("BOOTSTRAP_ADMIN_EMAILS still lists admin@cintara.ai — remove after initial bootstrap");
 }
@@ -103,10 +128,19 @@ if (!env("EMAIL_WORKFLOW_LAMBDA_ARN")) {
   );
 }
 
-if (isProdCheck && isVercelCheck && !env("BLOB_READ_WRITE_TOKEN")) {
+if (isProdCheck && isVercelCheck && !env("S3_ASSETS_BUCKET") && !env("BLOB_READ_WRITE_TOKEN")) {
   warnings.push(
-    "BLOB_READ_WRITE_TOKEN is unset — file uploads on Vercel will not persist (use Vercel Blob)",
+    "S3_ASSETS_BUCKET is unset — set it for production asset storage (or BLOB_READ_WRITE_TOKEN as legacy fallback)",
   );
+}
+
+if (isProdCheck && !env("S3_ASSETS_BUCKET")) {
+  const blobBackend =
+    env("BLOB_READ_WRITE_TOKEN") &&
+    (env("ASSET_STORAGE_BACKEND") === "vercel-blob" || env("ASSET_STORAGE_BACKEND") === "blob");
+  if (!blobBackend) {
+    errors.push("Missing required env: S3_ASSETS_BUCKET (class PDFs and media)");
+  }
 }
 
 if (isProdCheck && !isVercelCheck && !env("NEON_AUTH_URL") && env("VITE_NEON_AUTH_URL")) {

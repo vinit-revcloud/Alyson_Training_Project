@@ -3,11 +3,13 @@ import { z } from "zod";
 import { requireContentManager } from "@/integrations/neon/auth-middleware";
 import { assertAiRateLimit } from "@/lib/ai-rate-limit.server";
 import { deepseekChatCompletion } from "@/lib/ai/deepseek";
+import { gatherClassMaterialPg } from "@/lib/ai/section-material.server";
 import type { Question } from "./test-types";
 
 const InputSchema = z.object({
-  materialText: z.string().max(60000),
+  materialText: z.string().max(60000).optional().default(""),
   fileNames: z.array(z.string()).default([]),
+  classId: z.string().uuid().optional(),
   level: z.enum(["Novice", "Mid-Level", "Expert"]),
   role: z.string().default("Data Scientist"),
   count: z.number().int().min(10).max(60).default(35),
@@ -31,6 +33,16 @@ export const generateQuestions = createServerFn({ method: "POST" })
     assertAiRateLimit(context.userId);
     const isInterview = data.purpose === "interview";
 
+    let materialText = data.materialText?.trim() ?? "";
+    let fileNames = data.fileNames ?? [];
+    if (data.classId && materialText.length < 800) {
+      const gathered = await gatherClassMaterialPg(data.classId);
+      if (gathered.materialText.trim().length > materialText.length) {
+        materialText = gathered.materialText;
+        fileNames = [...new Set([...fileNames, ...gathered.fileNames])];
+      }
+    }
+
     const difficultyHint = isInterview
       ? "Interview-grade: minimum 70% medium or hard combined. No trivia. Prefer scenario-based, multi-step reasoning, debugging, system design, and applied problems."
       : data.level === "Novice"
@@ -40,7 +52,7 @@ export const generateQuestions = createServerFn({ method: "POST" })
           : "Challenging: easy 10%, medium 40%, hard 50%.";
 
     const materialExcerpt =
-      data.materialText.slice(0, 30000) ||
+      materialText.slice(0, 30000) ||
       (isInterview
         ? "(No material — use rigorous role-specific interview topics: architecture, trade-offs, debugging, code review, data/ML pipelines, product sense as appropriate.)"
         : "(No material uploaded — use general Data Science fundamentals: stats, ML, deep learning, Python, SQL, model evaluation, feature engineering.)");
@@ -56,7 +68,7 @@ export const generateQuestions = createServerFn({ method: "POST" })
 
     const userPrompt = `Generate exactly ${data.count} assessment questions from this material.
 
-FILES: ${data.fileNames.join(", ") || "none"}
+FILES: ${fileNames.join(", ") || "none"}
 
 MATERIAL:
 ${materialExcerpt}
