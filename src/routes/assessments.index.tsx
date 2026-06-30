@@ -574,6 +574,8 @@ function AssessmentsPage() {
         onAssigned={() => {
           setAssignTarget(null);
           qc.invalidateQueries({ queryKey: ["assessments-stats"] });
+          qc.invalidateQueries({ queryKey: ["assignments"] });
+          qc.invalidateQueries({ queryKey: ["assignment-metrics"] });
         }}
       />
 

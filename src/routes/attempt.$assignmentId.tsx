@@ -22,6 +22,7 @@ import {
 import { useServerFn } from "@tanstack/react-start";
 import {
   expireAssignment,
+  getActiveAttemptFn,
   getAttemptQuestions,
   getLearnerAssessmentMetadataFn,
   getLearnerAssignmentFn,
@@ -46,16 +47,9 @@ type AssignmentStatus =
   | "failed_capped"
   | "expired";
 
-interface AssignmentRow {
-  id: string;
-  learner_user_id: string;
-  assessment_id: string;
-  course_id: string | null;
-  due_at: string;
-  max_attempts: number;
-  attempts_used: number;
-  status: AssignmentStatus;
-  mode: "final" | "practice";
+function loadErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) return error.message.trim();
+  return "Could not load this assignment. Check your connection and try again.";
 }
 
 function AttemptPage() {
@@ -63,27 +57,49 @@ function AttemptPage() {
   const { user, loading: sessionLoading } = useSession();
   const qc = useQueryClient();
 
-  const { data: assignment, isLoading, isError: assignmentError, refetch: refetchAssignment } = useQuery({
+  const loadAssignment = useServerFn(getLearnerAssignmentFn);
+  const loadAssessmentMeta = useServerFn(getLearnerAssessmentMetadataFn);
+  const loadActiveAttempt = useServerFn(getActiveAttemptFn);
+  const fetchQuestions = useServerFn(getAttemptQuestions);
+  const runStartAttempt = useServerFn(startAttemptFn);
+  const runExpireAssignment = useServerFn(expireAssignment);
+  const gradeFn = useServerFn(gradeAndSubmitAttempt);
+
+  const {
+    data: assignment,
+    isLoading,
+    isError: assignmentError,
+    error: assignmentLoadError,
+    refetch: refetchAssignment,
+  } = useQuery({
     queryKey: ["assignment", assignmentId],
-    queryFn: async () => {
-      const row = await getLearnerAssignmentFn({ data: { assignmentId } });
-      return (row as AssignmentRow | null) ?? null;
-    },
+    queryFn: () => loadAssignment({ data: { assignmentId } }),
+    enabled: !!user?.id,
   });
 
-  const loadAssessmentMeta = useServerFn(getLearnerAssessmentMetadataFn);
-  const { data: assessment, isError: assessmentError } = useQuery({
+  const {
+    data: assessment,
+    isError: assessmentError,
+    error: assessmentLoadError,
+  } = useQuery({
     queryKey: ["learner-assessment-meta", assignmentId],
     queryFn: () => loadAssessmentMeta({ data: { assignmentId } }),
     enabled: !!assignment?.assessment_id,
   });
-  const fetchQuestions = useServerFn(getAttemptQuestions);
-  const runStartAttempt = useServerFn(startAttemptFn);
-  const runExpireAssignment = useServerFn(expireAssignment);
+
   const { data: questions = [] } = useQuery({
     queryKey: ["attempt-questions", assignmentId],
     queryFn: () => fetchQuestions({ data: { assignmentId } }),
     enabled: !!assignment?.assessment_id,
+  });
+
+  const { data: activeAttempt } = useQuery({
+    queryKey: ["active-attempt", assignmentId],
+    queryFn: () => loadActiveAttempt({ data: { assignmentId } }),
+    enabled:
+      !!assignment &&
+      assignment.status === "in_progress" &&
+      assignment.attempts_used < assignment.max_attempts,
   });
 
   // ---- Countdown ----
@@ -129,6 +145,13 @@ function AttemptPage() {
   const [resultScore, setResultScore] = useState<number | null>(null);
   const [resultPassed, setResultPassed] = useState<boolean | null>(null);
 
+  useEffect(() => {
+    if (!activeAttempt || started || submitted) return;
+    setAttemptId(activeAttempt.attemptId);
+    setAnswers(activeAttempt.answers);
+    setStarted(true);
+  }, [activeAttempt, started, submitted]);
+
   const startAttempt = useMutation({
     mutationFn: async () => {
       if (!assignment) throw new Error("Not ready");
@@ -138,11 +161,11 @@ function AttemptPage() {
       setAttemptId(id);
       setStarted(true);
       qc.invalidateQueries({ queryKey: ["assignment", assignmentId] });
+      qc.invalidateQueries({ queryKey: ["active-attempt", assignmentId] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const gradeFn = useServerFn(gradeAndSubmitAttempt);
   const submitAttempt = useMutation({
     mutationFn: async () => {
       if (!attemptId || !assignment) throw new Error("No attempt");
@@ -156,6 +179,7 @@ function AttemptPage() {
       setResultPassed(passed);
       setSubmitted(true);
       qc.invalidateQueries({ queryKey: ["assignment", assignmentId] });
+      qc.invalidateQueries({ queryKey: ["my-assignments"] });
       toast.success("Test submitted");
       window.scrollTo({ top: 0, behavior: "smooth" });
     },
@@ -182,14 +206,20 @@ function AttemptPage() {
   }
 
   if (assignmentError || assessmentError) {
+    const message = assignmentError
+      ? loadErrorMessage(assignmentLoadError)
+      : loadErrorMessage(assessmentLoadError);
     return (
       <div className="mx-auto max-w-lg px-5 py-12">
-        <p className="text-sm text-destructive">
-          Could not load this assignment. Check your connection and try again.
-        </p>
-        <Button variant="outline" size="sm" className="mt-3" onClick={() => void refetchAssignment()}>
-          Retry
-        </Button>
+        <p className="text-sm text-destructive">{message}</p>
+        <div className="mt-3 flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => void refetchAssignment()}>
+            Retry
+          </Button>
+          <Button asChild variant="ghost" size="sm">
+            <Link to="/learn/assignments">Back to assessments</Link>
+          </Button>
+        </div>
       </div>
     );
   }
@@ -201,7 +231,7 @@ function AttemptPage() {
       <header className="border-b border-border bg-card/80 backdrop-blur">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-5 py-3">
           <Link
-            to="/"
+            to="/learn/assignments"
             className="inline-flex items-center gap-1.5 text-[12.5px] text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft className="h-3.5 w-3.5" />

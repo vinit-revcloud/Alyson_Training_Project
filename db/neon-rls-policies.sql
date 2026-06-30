@@ -158,6 +158,17 @@ CREATE POLICY assessment_questions_write ON public.assessment_questions FOR ALL 
   USING (public.is_content_manager())
   WITH CHECK (public.is_content_manager());
 
+-- Trainees may read questions for assessments assigned to them (server also strips answers via pg pool).
+DROP POLICY IF EXISTS assessment_questions_learner_select ON public.assessment_questions;
+CREATE POLICY assessment_questions_learner_select ON public.assessment_questions FOR SELECT TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.assessment_assignments aa
+      WHERE aa.assessment_id = assessment_questions.assessment_id
+        AND aa.learner_user_id = auth.uid()
+    )
+  );
+
 DROP POLICY IF EXISTS assessment_templates_select ON public.assessment_templates;
 CREATE POLICY assessment_templates_select ON public.assessment_templates FOR SELECT TO authenticated
   USING (public.is_app_user());

@@ -176,10 +176,10 @@ function AssignmentsPage() {
             sub="all-time"
           />
           <MetricCard
-            label="In progress"
+            label="Open"
             value={String((metrics?.in_progress ?? 0) + (metrics?.assigned ?? 0))}
             icon={Clock}
-            sub="not yet graded"
+            sub={`${metrics?.assigned ?? 0} assigned · ${metrics?.in_progress ?? 0} started`}
           />
           <MetricCard
             label="Passed"
