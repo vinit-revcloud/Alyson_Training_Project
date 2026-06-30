@@ -9,6 +9,7 @@ import {
   publishAssessmentFn,
   saveClassAssessmentFn,
   setAssessmentStatusFn,
+  updateAssessmentDetailsFn,
 } from "@/lib/assessments.functions";
 import type { Question } from "@/lib/test-types";
 
@@ -27,6 +28,7 @@ export interface AssessmentRow {
   status: AssessmentStatus;
   is_primary: boolean;
   source: string;
+  purpose?: "training" | "interview";
   created_at: string;
   updated_at: string;
 }
@@ -59,6 +61,7 @@ export async function listAssessmentQuestions(
 }
 
 export interface SaveAssessmentInput {
+  assessmentId?: string;
   classId?: string;
   title: string;
   description?: string;
@@ -74,6 +77,14 @@ export interface SaveAssessmentInput {
 
 export async function saveClassAssessment(input: SaveAssessmentInput): Promise<string> {
   return saveClassAssessmentFn({ data: input });
+}
+
+export async function updateAssessmentDetails(input: {
+  assessmentId: string;
+  title: string;
+  description?: string;
+}): Promise<AssessmentRow> {
+  return updateAssessmentDetailsFn({ data: input });
 }
 
 export async function publishAssessment(assessmentId: string): Promise<void> {

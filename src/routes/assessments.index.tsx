@@ -53,6 +53,7 @@ import {
   BarChart3,
   Send,
   ClipboardList,
+  Eye,
 } from "lucide-react";
 import {
   listAllAssessmentsWithStats,
@@ -530,7 +531,7 @@ function AssessmentsPage() {
                                 })
                               }
                             >
-                              <BarChart3 className="mr-2 h-3.5 w-3.5" /> View results
+                              <Eye className="mr-2 h-3.5 w-3.5" /> Preview as candidate
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => dup.mutate(r.id)}

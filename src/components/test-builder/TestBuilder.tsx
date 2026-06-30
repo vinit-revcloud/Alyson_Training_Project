@@ -84,6 +84,12 @@ interface TestBuilderPreset {
 const mapClassDifficulty = (difficulty?: TestBuilderPreset["difficulty"]): CandidateLevel =>
   difficulty === "Beginner" ? "Novice" : difficulty === "Advanced" ? "Expert" : "Mid-Level";
 
+function defaultInterviewTitle(role: string) {
+  const r = role.trim() || "General";
+  const date = new Date().toISOString().slice(0, 10);
+  return `Interview · ${r} · ${date}`;
+}
+
 export function TestBuilder({ preset }: { preset?: TestBuilderPreset }) {
   const isInterview = preset?.purpose === "interview";
   const presetCount = (preset?.mcq ?? 0) + (preset?.subjective ?? 0);
@@ -92,7 +98,7 @@ export function TestBuilder({ preset }: { preset?: TestBuilderPreset }) {
   const [name, setName] = useState("");
   const [assessmentTitle, setAssessmentTitle] = useState(() => {
     if (preset?.className) return `${preset.className} Assessment`;
-    if (isInterview) return "Interview assessment";
+    if (isInterview) return defaultInterviewTitle(preset?.role ?? "");
     return "";
   });
   const [linkClassId, setLinkClassId] = useState(preset?.classId ?? "");
@@ -322,11 +328,12 @@ export function TestBuilder({ preset }: { preset?: TestBuilderPreset }) {
                   const title =
                     assessmentTitle.trim() ||
                     (isInterview
-                      ? "Interview assessment"
+                      ? defaultInterviewTitle(role)
                       : `${preset?.className ?? (role || "Training")} Assessment`);
                   setAttaching(true);
                   try {
                     const id = await saveClassAssessment({
+                      ...(savedAssessmentId ? { assessmentId: savedAssessmentId } : {}),
                       ...(linkToCourse && linkClassId ? { classId: linkClassId } : {}),
                       title,
                       role,

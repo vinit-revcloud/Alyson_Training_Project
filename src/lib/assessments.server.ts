@@ -31,6 +31,58 @@ export async function getAssessmentFromDb(assessmentId: string): Promise<Assessm
   return rows[0] ?? null;
 }
 
+export async function updateAssessmentDetailsInDb(
+  assessmentId: string,
+  input: {
+    title: string;
+    description?: string;
+  },
+): Promise<AssessmentRow> {
+  const title = input.title.trim();
+  if (!title) throw new Error("Assessment title is required");
+
+  const pool = getPgPool();
+  const existing = await getAssessmentFromDb(assessmentId);
+  if (!existing) throw new Error("Assessment not found");
+  if (existing.purpose === "interview") {
+    await assertUniqueInterviewTitle(pool, title, assessmentId);
+  }
+
+  const { rows } = await pool.query<AssessmentRow>(
+    `UPDATE assessments
+     SET title = $2,
+         description = COALESCE($3, description),
+         updated_at = now()
+     WHERE id = $1
+     RETURNING *`,
+    [assessmentId, title, input.description ?? null],
+  );
+  const row = rows[0];
+  if (!row) throw new Error("Assessment not found");
+  return row;
+}
+
+/** Interview tests are matched by title in bulk import — titles must be unique. */
+async function assertUniqueInterviewTitle(
+  executor: { query: PoolClient["query"] },
+  title: string,
+  excludeAssessmentId?: string,
+): Promise<void> {
+  const { rows } = await executor.query<{ id: string }>(
+    `SELECT id FROM assessments
+     WHERE purpose = 'interview'
+       AND lower(trim(title)) = lower(trim($1))
+       AND ($2::uuid IS NULL OR id <> $2)
+     LIMIT 1`,
+    [title, excludeAssessmentId ?? null],
+  );
+  if (rows[0]) {
+    throw new Error(
+      `An interview test named "${title}" already exists. Choose a unique title before saving.`,
+    );
+  }
+}
+
 export async function listAssessmentQuestionsFromDb(
   assessmentId: string,
 ): Promise<AssessmentQuestionRow[]> {
@@ -86,7 +138,12 @@ export async function saveClassAssessmentInDb(input: SaveAssessmentInput): Promi
     if (!classId) throw new Error("Class is required for this assessment.");
 
     const existing = isInterview
-      ? { rows: [] as AssessmentRow[] }
+      ? input.assessmentId
+        ? await client.query<AssessmentRow>(
+            `SELECT * FROM assessments WHERE id = $1 AND purpose = 'interview'`,
+            [input.assessmentId],
+          )
+        : { rows: [] as AssessmentRow[] }
       : await client.query<AssessmentRow>(
       `SELECT * FROM assessments
        WHERE class_id = $1 AND is_primary = true
@@ -107,6 +164,9 @@ export async function saveClassAssessmentInDb(input: SaveAssessmentInput): Promi
     let assessmentId: string;
     if (existing.rows[0]) {
       assessmentId = existing.rows[0].id;
+      if (isInterview) {
+        await assertUniqueInterviewTitle(client, input.title, assessmentId);
+      }
       await client.query(
         `UPDATE assessments SET
           class_id = $2, title = $3, description = $4, role = $5, difficulty = $6,
@@ -136,6 +196,9 @@ export async function saveClassAssessmentInDb(input: SaveAssessmentInput): Promi
         assessmentId,
       ]);
     } else {
+      if (isInterview) {
+        await assertUniqueInterviewTitle(client, input.title);
+      }
       const inserted = await client.query<{ id: string }>(
         `INSERT INTO assessments (
           class_id, title, description, role, difficulty, level, pass_mark, duration_min,
@@ -247,20 +310,38 @@ export async function duplicateAssessmentInDb(assessmentId: string): Promise<str
   const src = await getAssessmentFromDb(assessmentId);
   if (!src) throw new Error("Assessment not found");
   const questions = await listAssessmentQuestionsFromDb(assessmentId);
+  const purpose = src.purpose === "interview" ? "interview" : "training";
 
   const pool = getPgPool();
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+
+    let newTitle = `${src.title} (Copy)`;
+    if (purpose === "interview") {
+      let suffix = 2;
+      while (true) {
+        const { rows } = await client.query<{ id: string }>(
+          `SELECT id FROM assessments
+           WHERE purpose = 'interview' AND lower(trim(title)) = lower(trim($1))
+           LIMIT 1`,
+          [newTitle],
+        );
+        if (!rows[0]) break;
+        newTitle = `${src.title} (Copy ${suffix})`;
+        suffix += 1;
+      }
+    }
+
     const inserted = await client.query<{ id: string }>(
       `INSERT INTO assessments (
         class_id, title, description, role, difficulty, level, pass_mark, duration_min,
-        status, is_primary, source
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'draft',false,$9)
+        status, is_primary, source, purpose
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'draft',false,$9,$10)
       RETURNING id`,
       [
         src.class_id,
-        `${src.title} (Copy)`,
+        newTitle,
         src.description,
         src.role,
         src.difficulty,
@@ -268,6 +349,7 @@ export async function duplicateAssessmentInDb(assessmentId: string): Promise<str
         src.pass_mark,
         src.duration_min,
         src.source,
+        purpose,
       ],
     );
     const newId = inserted.rows[0].id;

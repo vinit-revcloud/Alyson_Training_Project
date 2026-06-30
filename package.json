@@ -42,6 +42,8 @@
     "db:apply-policy-pdf": "node scripts/apply-onboarding-policy-pdf.mjs",
     "assets:migrate-s3": "node scripts/migrate-assets-to-s3.mjs",
     "assets:test-s3": "node scripts/test-s3-assets.mjs",
+    "qa:interview-production": "node scripts/qa-interview-production.mjs",
+    "fix:interview-qa": "node scripts/fix-interview-qa-issues.mjs",
     "courses:promote-published": "node scripts/promote-published-courses.mjs",
     "test": "vitest run",
     "test:watch": "vitest"

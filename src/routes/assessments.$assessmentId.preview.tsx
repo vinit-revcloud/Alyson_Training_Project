@@ -1,6 +1,6 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { z } from "zod";
 import { AdminLayout } from "@/components/admin/AdminLayout";
@@ -11,21 +11,24 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Label } from "@/components/ui/label";
 import {
   ArrowLeft,
   CheckCircle2,
   Clock,
   Eye,
   EyeOff,
+  Pencil,
+  Save,
   Sparkles,
   Trophy,
   User as UserIcon,
+  Wand2,
 } from "lucide-react";
 import {
   getAssessment,
   listAssessmentQuestions,
   questionRowToQuestion,
+  updateAssessmentDetails,
 } from "@/lib/assessments-api";
 import { getClass } from "@/lib/classes-api";
 
@@ -39,6 +42,7 @@ export const Route = createFileRoute("/assessments/$assessmentId/preview")({
 
 function PreviewPage() {
   const { assessmentId } = Route.useParams();
+  const qc = useQueryClient();
 
   const {
     data: assessment,
@@ -61,6 +65,37 @@ function PreviewPage() {
   });
 
   const questions = useMemo(() => rows.map(questionRowToQuestion), [rows]);
+  const isInterview = assessment?.purpose === "interview";
+
+  const [draftTitle, setDraftTitle] = useState("");
+  const [draftDescription, setDraftDescription] = useState("");
+  const [detailsOpen, setDetailsOpen] = useState(true);
+
+  useEffect(() => {
+    if (!assessment) return;
+    setDraftTitle(assessment.title);
+    setDraftDescription(assessment.description ?? "");
+  }, [assessment?.id, assessment?.title, assessment?.description]);
+
+  const saveDetails = useMutation({
+    mutationFn: () =>
+      updateAssessmentDetails({
+        assessmentId,
+        title: draftTitle,
+        description: draftDescription,
+      }),
+    onSuccess: (updated) => {
+      qc.setQueryData(["assessment", assessmentId], updated);
+      qc.invalidateQueries({ queryKey: ["assessments-stats"] });
+      toast.success("Assessment details saved");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const detailsDirty =
+    !!assessment &&
+    (draftTitle.trim() !== assessment.title ||
+      draftDescription.trim() !== (assessment.description ?? "").trim());
 
   const [candidateName, setCandidateName] = useState("");
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -113,9 +148,22 @@ function PreviewPage() {
   return (
     <AdminLayout
       title="Candidate Preview"
-      subtitle="See exactly what a trainee sees when they take this assessment"
+      subtitle={
+        isInterview
+          ? "Edit the title candidates see, then walk through the test below"
+          : "Edit the title trainees see, then walk through the test below"
+      }
       actions={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant={detailsOpen ? "secondary" : "outline"}
+            size="sm"
+            onClick={() => setDetailsOpen((v) => !v)}
+            className="h-9 gap-1.5 rounded-lg"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+            {detailsOpen ? "Hide details" : "Edit title"}
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -127,11 +175,22 @@ function PreviewPage() {
           </Button>
           {assessment.class_id ? (
             <Button asChild variant="outline" size="sm" className="h-9 gap-1.5 rounded-lg">
-              <Link to="/classes/$classId" params={{ classId: assessment.class_id }}>
-                <ArrowLeft className="h-3.5 w-3.5" /> Back to class
+              <Link
+                to="/assessments/builder"
+                search={{
+                  classId: assessment.class_id,
+                  purpose: isInterview ? "interview" : "training",
+                }}
+              >
+                <Wand2 className="h-3.5 w-3.5" /> Edit questions
               </Link>
             </Button>
           ) : null}
+          <Button asChild variant="outline" size="sm" className="h-9 gap-1.5 rounded-lg">
+            <Link to={isInterview ? "/interviews/assessments" : "/assessments"}>
+              <ArrowLeft className="h-3.5 w-3.5" /> Back
+            </Link>
+          </Button>
         </div>
       }
     >
@@ -143,19 +202,90 @@ function PreviewPage() {
           />
         ) : null}
 
+        {detailsOpen ? (
+          <Card className="rounded-xl border-primary/25 bg-primary/5 p-4 shadow-soft">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-[13px] font-semibold text-foreground">Assessment details</p>
+                <p className="mt-0.5 text-[12px] text-muted-foreground">
+                  Changes apply to scheduled interviews and candidate-facing screens. The preview
+                  below updates as you type.
+                </p>
+              </div>
+              <Badge variant="outline" className="shrink-0 capitalize">
+                {assessment.status.replace("_", " ")}
+              </Badge>
+            </div>
+            <div className="mt-4 grid gap-3">
+              <label className="block space-y-1.5">
+                <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Title
+                </span>
+                <Input
+                  value={draftTitle}
+                  onChange={(e) => setDraftTitle(e.target.value)}
+                  placeholder={isInterview ? "e.g. Senior Data Engineer — SQL & Python" : "e.g. Module 3 Final Test"}
+                  className="h-10 rounded-md text-[13px]"
+                />
+              </label>
+              <label className="block space-y-1.5">
+                <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Short description{" "}
+                  <span className="normal-case text-muted-foreground/80">(optional)</span>
+                </span>
+                <Textarea
+                  value={draftDescription}
+                  onChange={(e) => setDraftDescription(e.target.value)}
+                  placeholder="e.g. SQL, Python, AWS, Spark — 45 min technical screen"
+                  className="min-h-[72px] rounded-md text-[13px]"
+                />
+              </label>
+            </div>
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                className="gap-1.5"
+                disabled={!detailsDirty || !draftTitle.trim() || saveDetails.isPending}
+                onClick={() => saveDetails.mutate()}
+              >
+                <Save className="h-3.5 w-3.5" />
+                {saveDetails.isPending ? "Saving…" : "Save changes"}
+              </Button>
+              {detailsDirty ? (
+                <span className="text-[11px] text-amber-700 dark:text-amber-400">
+                  Unsaved changes — preview below shows your edits
+                </span>
+              ) : (
+                <span className="text-[11px] text-muted-foreground">All changes saved</span>
+              )}
+            </div>
+          </Card>
+        ) : null}
+
+        <div className="flex items-center gap-2 rounded-lg border border-dashed border-border bg-muted/30 px-3 py-2 text-[11.5px] text-muted-foreground">
+          <Eye className="h-3.5 w-3.5 shrink-0" />
+          Preview mode — answers are not saved. This is what{" "}
+          {isInterview ? "candidates" : "trainees"} will see.
+        </div>
+
         {/* Header card — looks like the candidate-facing test cover */}
         <Card className="overflow-hidden rounded-2xl border-border shadow-soft">
           <div className="bg-gradient-hero p-6 text-primary-foreground">
             <div className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.22em] opacity-80">
-              <Sparkles className="h-3 w-3" /> Alyson Training · Final Assessment
+              <Sparkles className="h-3 w-3" /> Alyson Training ·{" "}
+              {isInterview ? "Interview Assessment" : "Final Assessment"}
             </div>
             <h1 className="mt-3 font-display text-2xl leading-tight md:text-3xl">
-              {assessment.title}
+              {draftTitle.trim() || "Untitled assessment"}
             </h1>
-            {cls ? (
+            {draftDescription.trim() ? (
+              <p className="mt-2 text-[12.5px] leading-relaxed opacity-90">{draftDescription}</p>
+            ) : cls ? (
               <p className="mt-1 text-[12.5px] opacity-85">
                 {cls.name} · {assessment.role || cls.audience}
               </p>
+            ) : assessment.role ? (
+              <p className="mt-1 text-[12.5px] opacity-85">{assessment.role}</p>
             ) : null}
             <div className="mt-4 flex flex-wrap gap-1.5 text-[11px]">
               <Pill>
@@ -165,26 +295,20 @@ function PreviewPage() {
               <Pill>{questions.length} questions</Pill>
               <Pill>Pass {assessment.pass_mark ?? 60}%</Pill>
               <Pill>{assessment.difficulty ?? "Intermediate"}</Pill>
-              <Pill>Status: {assessment.status ?? "draft"}</Pill>
             </div>
           </div>
           <div className="p-5">
-            <div className="grid gap-3 md:grid-cols-[1fr_auto]">
-              <label className="block space-y-1.5">
-                <span className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                  <UserIcon className="h-3 w-3" /> Your name
-                </span>
-                <Input
-                  value={candidateName}
-                  onChange={(e) => setCandidateName(e.target.value)}
-                  placeholder="e.g. Priya Sharma"
-                  className="h-10 rounded-md text-[13px]"
-                />
-              </label>
-              <div className="self-end text-[11px] text-muted-foreground">
-                This is a preview — no answers are saved.
-              </div>
-            </div>
+            <label className="block space-y-1.5">
+              <span className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                <UserIcon className="h-3 w-3" /> Your name
+              </span>
+              <Input
+                value={candidateName}
+                onChange={(e) => setCandidateName(e.target.value)}
+                placeholder="e.g. Priya Sharma"
+                className="h-10 rounded-md text-[13px]"
+              />
+            </label>
           </div>
         </Card>
 

@@ -12,6 +12,7 @@ import {
   publishAssessmentInDb,
   saveClassAssessmentInDb,
   setAssessmentStatusInDb,
+  updateAssessmentDetailsInDb,
 } from "@/lib/assessments.server";
 import type {
   AssessmentQuestionRow,
@@ -40,6 +41,7 @@ const QuestionSchema = z.object({
 });
 
 const SaveAssessmentInputSchema = z.object({
+  assessmentId: z.string().uuid().optional(),
   classId: z.string().uuid().optional(),
   title: z.string().min(1),
   description: z.string().optional(),
@@ -52,6 +54,22 @@ const SaveAssessmentInputSchema = z.object({
   questions: z.array(QuestionSchema),
   purpose: z.enum(["training", "interview"]).optional(),
 });
+
+const UpdateAssessmentDetailsSchema = z.object({
+  assessmentId: z.string().uuid(),
+  title: z.string().min(1).max(200),
+  description: z.string().max(2000).optional(),
+});
+
+export const updateAssessmentDetailsFn = createServerFn({ method: "POST" })
+  .middleware([requireContentManager])
+  .inputValidator((data: unknown) => UpdateAssessmentDetailsSchema.parse(data))
+  .handler(async ({ data }): Promise<AssessmentRow> =>
+    updateAssessmentDetailsInDb(data.assessmentId, {
+      title: data.title,
+      description: data.description,
+    }),
+  );
 
 export const getClassAssessmentFn = createServerFn({ method: "POST" })
   .middleware([requireContentManager])
