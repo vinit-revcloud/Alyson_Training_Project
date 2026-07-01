@@ -573,14 +573,57 @@ Training learn/admin integration is **GO** only if:
 
 ---
 
+## Phase J — Reliability & interruption (scale rollout)
+
+Run after `npm run db:apply-scale-reliability`.
+
+### J1. Trainee attempt draft save
+
+1. Start a training assessment as trainee
+2. Answer 3+ questions (MCQ + subjective)
+3. **Refresh browser** mid-attempt
+4. **Expect:** All answers restored; same attempt continues
+5. Close tab, reopen assignment URL
+6. **Expect:** Answers still present (server + localStorage)
+
+### J2. Double submit protection
+
+1. Complete attempt; double-click **Submit test** rapidly
+2. **Expect:** Single grade; `attempts_used` increments once only
+
+### J3. Concurrent start
+
+1. Open same assignment in two tabs; click **Start test** in both
+2. **Expect:** Single `in_progress` attempt; no duplicate rows
+
+### J4. Interview timeout recovery
+
+1. Let interview timer expire with network throttled (DevTools)
+2. If auto-submit fails, **Expect:** Manual **Submit now** button remains enabled
+
+### J5. Neon storage alert (admin)
+
+1. Sign in as admin when DB ≥ 75% of 512 MB free tier (or simulate via `database_storage_stats()`)
+2. **Expect:** Amber banner in admin console with link to Settings
+
+### J6. Cold start resilience
+
+1. Wait 5+ minutes idle on production URL
+2. Load `/learn/dashboard` or `/attempt/$id`
+3. **Expect:** Loading state then content (React Query retry); no white screen
+
+---
+
 ## Quick reference — useful commands
 
 ```bash
 npm run validate:deploy -- --production
+npm run db:apply-scale-reliability
 node scripts/audit-schema.mjs
 npm run assets:test-s3
 npm run assets:ingest-external -- --dry-run
 npm run courses:promote-published
+npm run qa:learn-production
 ```
 
 ```sql
@@ -592,4 +635,7 @@ JOIN sections s ON s.class_id = cl.id
 WHERE c.status = 'published'
 GROUP BY c.id, c.title, c.is_core_onboarding
 ORDER BY c.is_core_onboarding DESC, c.title;
+
+-- Neon storage usage (after scale-reliability migration)
+SELECT * FROM database_storage_stats();
 ```

@@ -1,4 +1,4 @@
-import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { createFileRoute, Link, notFound, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -30,7 +30,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/admin/StatusBadge";
-import { getCourse, deleteClass } from "@/lib/classes-api";
+import { getCourse, deleteClass, deleteCourse } from "@/lib/classes-api";
 import {
   DEPARTMENTS,
   getCourseDepartments,
@@ -86,8 +86,10 @@ export const Route = createFileRoute("/courses/$courseId")({
 
 function CourseDetail() {
   const { courseId } = Route.useParams();
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [deleteCourseOpen, setDeleteCourseOpen] = useState(false);
 
   const {
     data: course,
@@ -128,6 +130,22 @@ function CourseDetail() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const deleteCourseMutation = useMutation({
+    mutationFn: () => deleteCourse(courseId),
+    onSuccess: (result) => {
+      setDeleteCourseOpen(false);
+      void qc.invalidateQueries({ queryKey: ["courses"] });
+      void qc.invalidateQueries({ queryKey: ["all-course-departments"] });
+      toast.success(
+        result.deletedClasses > 0
+          ? `Course deleted (${result.deletedClasses} class${result.deletedClasses === 1 ? "" : "es"} removed)`
+          : "Course deleted",
+      );
+      void navigate({ to: "/courses" });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   if (courseLoading) {
     return (
       <AdminLayout title="Course" subtitle="Loading course details…">
@@ -156,6 +174,13 @@ function CourseDetail() {
       subtitle={`${course.role} · ${course.level}`}
       actions={
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            className="h-9 gap-2 rounded-lg text-destructive hover:bg-destructive/10 hover:text-destructive"
+            onClick={() => setDeleteCourseOpen(true)}
+          >
+            <Trash2 className="h-4 w-4" /> Delete course
+          </Button>
           <Button
             variant="outline"
             className="h-9 gap-2 rounded-lg"
@@ -250,6 +275,50 @@ function CourseDetail() {
         courseId={courseId}
         courseTitle={course.title}
       />
+
+      <AlertDialog open={deleteCourseOpen} onOpenChange={setDeleteCourseOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete course?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>
+                  This will permanently delete <strong>{course.title}</strong>
+                  {tree.length > 0 ? (
+                    <>
+                      {" "}
+                      and its <strong>{tree.length}</strong> class
+                      {tree.length === 1 ? "" : "es"} (sections, assets, and linked assessments).
+                    </>
+                  ) : (
+                    "."
+                  )}
+                </p>
+                <p>Department assignments and learner path links for this course will also be removed.</p>
+                {course.is_core_onboarding ? (
+                  <p className="text-destructive">
+                    Turn off core onboarding below before deleting this course.
+                  </p>
+                ) : null}
+                <p>This action cannot be undone.</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteCourseMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteCourseMutation.isPending || course.is_core_onboarding}
+              onClick={(e) => {
+                e.preventDefault();
+                deleteCourseMutation.mutate();
+              }}
+            >
+              {deleteCourseMutation.isPending ? "Deleting…" : "Delete course"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AdminLayout>
   );
 }

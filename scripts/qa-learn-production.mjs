@@ -261,6 +261,34 @@ async function runDbChecks() {
        WHERE status IN ('assigned', 'in_progress')`,
     );
     pass("G-DATA", `${openAssignments.rows[0].n} open trainee assignment(s) for manual attempt test`);
+
+    const idx = await pool.query(
+      `SELECT 1 FROM pg_indexes WHERE indexname = 'idx_attempts_one_in_progress' LIMIT 1`,
+    );
+    if (idx.rowCount) {
+      pass("REL-INDEX", "Partial unique index on in_progress attempts exists");
+    } else {
+      warn("REL-INDEX", "Run npm run db:apply-scale-reliability for attempt integrity index");
+    }
+
+    try {
+      const storage = await pool.query(`SELECT used_pct FROM database_storage_stats()`);
+      const pct = Number(storage.rows[0]?.used_pct ?? 0);
+      if (pct >= 75) {
+        warn("REL-STORAGE", `Neon DB storage at ${pct}% — admin banner should appear`);
+      } else {
+        pass("REL-STORAGE", `Neon DB storage at ${pct}% (limit 512 MB free tier)`);
+      }
+    } catch {
+      warn("REL-STORAGE", "database_storage_stats() missing — run db:apply-scale-reliability");
+    }
+
+    const dbUrl = env.DATABASE_URL || process.env.DATABASE_URL || "";
+    if (dbUrl.includes("-pooler") || dbUrl.includes("pooler.")) {
+      pass("REL-POOLER", "DATABASE_URL uses Neon pooler host");
+    } else {
+      warn("REL-POOLER", "DATABASE_URL should use -pooler host for serverless");
+    }
   } finally {
     await pool.end();
   }

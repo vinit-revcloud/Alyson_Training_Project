@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ChevronDown, ChevronRight, Search } from "lucide-react";
 import { useMemo, useState } from "react";
+import { QueryLoadError } from "@/components/admin/QueryLoadError";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { getOnboardingNavFn } from "@/lib/onboarding/onboarding.functions";
@@ -104,7 +105,7 @@ function CourseNav({ course }: { course: OnboardingNavCourse }) {
 export function LearnSidebarNav() {
   const [search, setSearch] = useState("");
   const loadNav = useServerFn(getOnboardingNavFn);
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["onboarding-nav"],
     queryFn: () => loadNav(),
   });
@@ -120,6 +121,14 @@ export function LearnSidebarNav() {
 
   if (isLoading) {
     return <p className="px-2 py-4 text-xs text-muted-foreground">Loading guides…</p>;
+  }
+
+  if (isError) {
+    return (
+      <div className="p-2">
+        <QueryLoadError message="Could not load guides" onRetry={() => void refetch()} />
+      </div>
+    );
   }
 
   return (

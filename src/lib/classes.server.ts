@@ -353,3 +353,28 @@ export async function deleteClassInDb(classId: string): Promise<void> {
   const { rowCount } = await pool.query(`DELETE FROM classes WHERE id = $1`, [classId]);
   if (!rowCount) throw new Error("Class not found");
 }
+
+export async function deleteCourseInDb(courseId: string): Promise<{ deletedClasses: number }> {
+  const course = await getCourseFromDb(courseId);
+  if (!course) throw new Error("Course not found");
+  if (course.is_core_onboarding) {
+    throw new Error(
+      "This course is marked as core onboarding. Turn off core onboarding on the course page before deleting it.",
+    );
+  }
+
+  const pool = getPgPool();
+  const { rows: classRows } = await pool.query<{ id: string }>(
+    `SELECT id FROM classes WHERE course_id = $1`,
+    [courseId],
+  );
+
+  for (const row of classRows) {
+    await deleteClassInDb(row.id);
+  }
+
+  const { rowCount } = await pool.query(`DELETE FROM courses WHERE id = $1`, [courseId]);
+  if (!rowCount) throw new Error("Course not found");
+
+  return { deletedClasses: classRows.length };
+}

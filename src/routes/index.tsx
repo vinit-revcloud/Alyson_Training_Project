@@ -85,16 +85,22 @@ function Dashboard() {
   const [department, setDepartment] = useState<Department>("All");
   const [role, setRole] = useState<RoleFilter>("All");
 
-  const { data } = useQuery({
+  const { data, isError: metricsError, refetch: refetchMetrics } = useQuery({
     queryKey: ["dashboard-metrics"],
     queryFn: fetchDashboardMetrics,
     ...DASHBOARD_QUERY_OPTS,
   });
-  const { data: summary } = useQuery({
+  const {
+    data: summary,
+    isError: summaryError,
+    refetch: refetchSummary,
+  } = useQuery({
     queryKey: ["dashboard-summary"],
     queryFn: fetchDashboardSummary,
     ...DASHBOARD_QUERY_OPTS,
   });
+
+  const dashboardLoadError = metricsError || summaryError;
 
   const totalUsers = summary?.totalUsers ?? 0;
   const inProgress = summary?.activeAssignments ?? 0;
@@ -172,6 +178,21 @@ function Dashboard() {
       }
     >
       <div className="space-y-6">
+        {dashboardLoadError ? (
+          <Card className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-destructive/40 bg-destructive/5 p-4">
+            <p className="text-sm text-destructive">Could not load dashboard metrics.</p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                void refetchMetrics();
+                void refetchSummary();
+              }}
+            >
+              Retry
+            </Button>
+          </Card>
+        ) : null}
         {/* Top metrics row — 6 cards */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
           <MetricCard label="Total Users" value={String(totalUsers)} icon={Users} sub="registered profiles" />

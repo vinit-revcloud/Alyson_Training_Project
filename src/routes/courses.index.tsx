@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { QueryLoadError } from "@/components/admin/QueryLoadError";
 import { Card } from "@/components/ui/card";
@@ -12,8 +12,19 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Plus,
   Users,
@@ -28,12 +39,14 @@ import {
   TrendingUp,
   ArrowUpDown,
   FileSpreadsheet,
+  Trash2,
 } from "lucide-react";
 import { BulkClassImportDialog } from "@/components/admin/BulkClassImportDialog";
-import { listCourses, type ClassStatus } from "@/lib/classes-api";
+import { listCourses, deleteCourse, type ClassStatus, type CourseWithStats } from "@/lib/classes-api";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { getAllCourseDepartments } from "@/lib/assignments-api";
 import { DEPARTMENTS } from "@/lib/departments";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/courses/")({
   head: () => ({ meta: [{ title: "Courses — Alyson Training Project" }] }),
@@ -47,6 +60,23 @@ function CoursesPage() {
   const [sort, setSort] = useState<"recent" | "title" | "enrolled" | "completion">("recent");
   const navigate = useNavigate();
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [courseToDelete, setCourseToDelete] = useState<CourseWithStats | null>(null);
+  const qc = useQueryClient();
+
+  const deleteCourseMutation = useMutation({
+    mutationFn: (courseId: string) => deleteCourse(courseId),
+    onSuccess: (result) => {
+      setCourseToDelete(null);
+      void qc.invalidateQueries({ queryKey: ["courses"] });
+      void qc.invalidateQueries({ queryKey: ["all-course-departments"] });
+      toast.success(
+        result.deletedClasses > 0
+          ? `Course deleted (${result.deletedClasses} class${result.deletedClasses === 1 ? "" : "es"} removed)`
+          : "Course deleted",
+      );
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   const { data: courses = [], isLoading, isError, refetch } = useQuery({
     queryKey: ["courses"],
@@ -232,6 +262,13 @@ function CoursesPage() {
                         <DropdownMenuItem onClick={() => navigate({ to: "/classes/new" })}>
                           <Copy className="mr-2 h-3.5 w-3.5" /> Duplicate
                         </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive"
+                          onClick={() => setCourseToDelete(c)}
+                        >
+                          <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete course
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
@@ -301,6 +338,53 @@ function CoursesPage() {
         ) : null}
       </div>
       <BulkClassImportDialog open={bulkOpen} onOpenChange={setBulkOpen} />
+
+      <AlertDialog open={!!courseToDelete} onOpenChange={(o) => !o && setCourseToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete course?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                {courseToDelete ? (
+                  <>
+                    <p>
+                      This will permanently delete <strong>{courseToDelete.title}</strong>
+                      {courseToDelete.classCount > 0 ? (
+                        <>
+                          {" "}
+                          and its <strong>{courseToDelete.classCount}</strong> class
+                          {courseToDelete.classCount === 1 ? "" : "es"} (sections, assets, and
+                          linked assessments).
+                        </>
+                      ) : (
+                        "."
+                      )}
+                    </p>
+                    <p>Department assignments and learner path links for this course will also be removed.</p>
+                    {courseToDelete.is_core_onboarding ? (
+                      <p className="text-destructive">
+                        This course is marked as core onboarding. Turn that off on the course page
+                        before deleting.
+                      </p>
+                    ) : null}
+                    <p>This action cannot be undone.</p>
+                  </>
+                ) : null}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteCourseMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteCourseMutation.isPending || !!courseToDelete?.is_core_onboarding}
+              onClick={() => courseToDelete && deleteCourseMutation.mutate(courseToDelete.id)}
+            >
+              {deleteCourseMutation.isPending ? "Deleting…" : "Delete course"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AdminLayout>
   );
 }

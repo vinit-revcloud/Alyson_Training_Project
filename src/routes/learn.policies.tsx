@@ -1,24 +1,25 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { acknowledgePolicyFn, listPoliciesFn } from "@/lib/onboarding/onboarding.functions";
 import { getSignedAssetUrlFn } from "@/lib/asset.functions";
 import type { AssetBucket } from "@/lib/asset-storage.shared";
+import { useRefreshableAssetUrl } from "@/lib/useRefreshableAssetUrl";
 import { QueryLoadError } from "@/components/admin/QueryLoadError";
 import { toast } from "sonner";
 
 function PolicyPdfLink({ bucket, storagePath }: { bucket: string; storagePath: string }) {
   const signFn = useServerFn(getSignedAssetUrlFn);
-  const [url, setUrl] = useState<string | null>(null);
+  const [initialUrl, setInitialUrl] = useState<string | null>(null);
   const [signError, setSignError] = useState(false);
 
   useEffect(() => {
     setSignError(false);
-    setUrl(null);
+    setInitialUrl(null);
     void signFn({
       data: {
         bucket: bucket as AssetBucket,
@@ -26,9 +27,23 @@ function PolicyPdfLink({ bucket, storagePath }: { bucket: string; storagePath: s
         expiresIn: 3600,
       },
     })
-      .then((r) => setUrl(r.url))
+      .then((r) => setInitialUrl(r.url))
       .catch(() => setSignError(true));
   }, [bucket, storagePath, signFn]);
+
+  const resign = useCallback(async () => {
+    try {
+      const r = await signFn({
+        data: { bucket: bucket as AssetBucket, storagePath, expiresIn: 3600 },
+      });
+      return r.url;
+    } catch {
+      setSignError(true);
+      return null;
+    }
+  }, [bucket, storagePath, signFn]);
+
+  const { url, onMediaError } = useRefreshableAssetUrl(initialUrl, resign);
 
   if (signError) {
     return <p className="text-sm text-muted-foreground">PDF link unavailable — contact HR.</p>;
@@ -39,6 +54,7 @@ function PolicyPdfLink({ bucket, storagePath }: { bucket: string; storagePath: s
       href={url}
       target="_blank"
       rel="noopener noreferrer"
+      onClick={() => onMediaError()}
       className="text-sm font-medium text-primary hover:underline"
     >
       Open PDF handbook

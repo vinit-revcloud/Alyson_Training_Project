@@ -1,5 +1,5 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -27,8 +27,15 @@ import {
   getLearnerAssessmentMetadataFn,
   getLearnerAssignmentFn,
   gradeAndSubmitAttempt,
+  saveDraftAnswersFn,
   startAttempt as startAttemptFn,
 } from "@/lib/attempt.functions";
+import {
+  clearLocalAttemptDraft,
+  loadLocalAttemptDraft,
+  mergeDraftAnswers,
+  saveLocalAttemptDraft,
+} from "@/lib/attempt-draft.shared";
 import { useSession } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
@@ -64,6 +71,10 @@ function AttemptPage() {
   const runStartAttempt = useServerFn(startAttemptFn);
   const runExpireAssignment = useServerFn(expireAssignment);
   const gradeFn = useServerFn(gradeAndSubmitAttempt);
+  const saveDraftFn = useServerFn(saveDraftAnswersFn);
+
+  const answersRef = useRef<Record<string, string>>({});
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const {
     data: assignment,
@@ -87,13 +98,21 @@ function AttemptPage() {
     enabled: !!assignment?.assessment_id,
   });
 
-  const { data: questions = [] } = useQuery({
+  const {
+    data: questions = [],
+    isLoading: questionsLoading,
+    isError: questionsError,
+    refetch: refetchQuestions,
+  } = useQuery({
     queryKey: ["attempt-questions", assignmentId],
     queryFn: () => fetchQuestions({ data: { assignmentId } }),
     enabled: !!assignment?.assessment_id,
   });
 
-  const { data: activeAttempt } = useQuery({
+  const {
+    data: activeAttempt,
+    isLoading: activeAttemptLoading,
+  } = useQuery({
     queryKey: ["active-attempt", assignmentId],
     queryFn: () => loadActiveAttempt({ data: { assignmentId } }),
     enabled:
@@ -141,16 +160,65 @@ function AttemptPage() {
   const [started, setStarted] = useState(false);
   const [attemptId, setAttemptId] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [answersLoaded, setAnswersLoaded] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [resultScore, setResultScore] = useState<number | null>(null);
   const [resultPassed, setResultPassed] = useState<boolean | null>(null);
 
+  answersRef.current = answers;
+
   useEffect(() => {
-    if (!activeAttempt || started || submitted) return;
+    if (!activeAttempt || started || submitted || answersLoaded) return;
+    const merged = mergeDraftAnswers(
+      loadLocalAttemptDraft(assignmentId),
+      activeAttempt.answers,
+    );
     setAttemptId(activeAttempt.attemptId);
-    setAnswers(activeAttempt.answers);
+    setAnswers(merged);
     setStarted(true);
-  }, [activeAttempt, started, submitted]);
+    setAnswersLoaded(true);
+  }, [activeAttempt, started, submitted, answersLoaded, assignmentId]);
+
+  useEffect(() => {
+    if (!started || submitted || !answersLoaded || !attemptId) return;
+    saveLocalAttemptDraft(assignmentId, answers);
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      saveDraftFn({
+        data: {
+          assignmentId,
+          attemptId,
+          answers: answersRef.current,
+        },
+      }).catch((err) => {
+        console.warn("[attempt] draft autosave failed", err);
+      });
+    }, 1500);
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, [
+    answers,
+    answersLoaded,
+    assignmentId,
+    attemptId,
+    saveDraftFn,
+    started,
+    submitted,
+  ]);
+
+  useEffect(() => {
+    const flushDraft = () => {
+      if (!started || submitted || !answersLoaded || !attemptId) return;
+      const current = answersRef.current;
+      saveLocalAttemptDraft(assignmentId, current);
+      saveDraftFn({
+        data: { assignmentId, attemptId, answers: current },
+      }).catch(() => {});
+    };
+    window.addEventListener("pagehide", flushDraft);
+    return () => window.removeEventListener("pagehide", flushDraft);
+  }, [answersLoaded, assignmentId, attemptId, saveDraftFn, started, submitted]);
 
   const startAttempt = useMutation({
     mutationFn: async () => {
@@ -160,6 +228,7 @@ function AttemptPage() {
     onSuccess: (id) => {
       setAttemptId(id);
       setStarted(true);
+      setAnswersLoaded(true);
       qc.invalidateQueries({ queryKey: ["assignment", assignmentId] });
       qc.invalidateQueries({ queryKey: ["active-attempt", assignmentId] });
     },
@@ -174,13 +243,14 @@ function AttemptPage() {
         data: { assignmentId: assignment.id, attemptId, answers },
       });
     },
-    onSuccess: ({ score, passed }) => {
+    onSuccess: ({ score, passed, alreadySubmitted }) => {
       setResultScore(score);
       setResultPassed(passed);
       setSubmitted(true);
+      clearLocalAttemptDraft(assignmentId);
       qc.invalidateQueries({ queryKey: ["assignment", assignmentId] });
       qc.invalidateQueries({ queryKey: ["my-assignments"] });
-      toast.success("Test submitted");
+      toast.success(alreadySubmitted ? "Test already submitted" : "Test submitted");
       window.scrollTo({ top: 0, behavior: "smooth" });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -193,14 +263,49 @@ function AttemptPage() {
     !isExpiredByTime &&
     assignment.attempts_used < assignment.max_attempts &&
     assignment.status !== "passed" &&
-    assignment.status !== "failed_capped";
+    assignment.status !== "failed_capped" &&
+    !questionsLoading &&
+    !questionsError &&
+    questions.length > 0;
+
+  const resumePending =
+    assignment?.status === "in_progress" && activeAttemptLoading && !started;
 
   if (!isLoading && !assignment && !assignmentError) throw notFound();
 
-  if (sessionLoading || isLoading) {
+  if (sessionLoading || isLoading || resumePending) {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-background">
         <p className="text-sm text-muted-foreground">Loading assignment…</p>
+      </div>
+    );
+  }
+
+  if (questionsError) {
+    return (
+      <div className="mx-auto max-w-lg px-5 py-12">
+        <p className="text-sm text-destructive">Could not load test questions.</p>
+        <div className="mt-3 flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => void refetchQuestions()}>
+            Retry
+          </Button>
+          <Button asChild variant="ghost" size="sm">
+            <Link to="/learn/assignments">Back to assessments</Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!questionsLoading && questions.length === 0 && !submitted) {
+    return (
+      <div className="mx-auto max-w-lg px-5 py-12">
+        <p className="text-sm text-muted-foreground">
+          This assessment has no questions yet. Contact your trainer.
+        </p>
+        <Button asChild variant="ghost" size="sm" className="mt-3">
+          <Link to="/learn/assignments">Back to assessments</Link>
+        </Button>
       </div>
     );
   }

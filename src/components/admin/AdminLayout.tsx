@@ -13,6 +13,7 @@ import { NoAccessPanel } from "@/components/auth/NoAccessPanel";
 import { canAccessAdminRoute, hiringManagerHomePath, isHiringManagerOnly, isLearnerOnly, navItemsForRoles } from "@/lib/role-access";
 import { useViewMode } from "@/lib/view-mode";
 import alysonLogo from "@/assets/alyson-logo.svg";
+import { DatabaseStorageBanner } from "@/components/admin/DatabaseStorageBanner";
 
 export function AdminLayout({
   title,
@@ -225,6 +226,8 @@ export function AdminLayout({
           </button>
           {actions}
         </header>
+
+        {roles.includes("admin") ? <DatabaseStorageBanner /> : null}
 
         <main className="flex-1 p-6 lg:p-8">{children}</main>
       </div>

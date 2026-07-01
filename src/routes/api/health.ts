@@ -49,6 +49,27 @@ export const Route = createFileRoute("/api/health")({
         checks.aiConfigured = Boolean(getDeepSeekApiKey() || getOpenRouterApiKey());
         checks.poolMax = process.env.PG_POOL_MAX ?? (process.env.VERCEL ? "2" : "5");
 
+        const dbUrl = process.env.DATABASE_URL ?? "";
+        checks.neonPooler = dbUrl.includes("-pooler") || dbUrl.includes("pooler.");
+        if (!checks.neonPooler) {
+          checks.neonPoolerWarning =
+            "DATABASE_URL should use Neon connection pooler host (-pooler) for serverless";
+        }
+
+        let storageUsedPct: number | null = null;
+        try {
+          const pool = getPgPool();
+          const storageRes = await pool.query<{ used_pct: string }>(
+            `SELECT used_pct::text FROM database_storage_stats()`,
+          );
+          storageUsedPct = Number(storageRes.rows[0]?.used_pct ?? NaN);
+          if (Number.isFinite(storageUsedPct)) {
+            checks.databaseStoragePct = storageUsedPct;
+          }
+        } catch {
+          /* migration not applied yet */
+        }
+
         const ok = database && checks.neonAuthJwks === true;
         return Response.json({ ok, checks }, { status: ok ? 200 : 503 });
       },

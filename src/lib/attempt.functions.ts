@@ -8,6 +8,7 @@ import {
   getLearnerAssessmentMetadataFromDb,
   getLearnerAssignmentFromDb,
   gradeAndSubmitAttemptInDb,
+  saveDraftAnswersInDb,
   startAttemptInDb,
 } from "@/lib/attempt.server";
 
@@ -27,6 +28,25 @@ const GradeInput = z.object({
   attemptId: z.string().uuid(),
   answers: z.record(z.string().uuid(), z.string().max(20000)),
 });
+
+const DraftInput = z.object({
+  assignmentId: z.string().uuid(),
+  attemptId: z.string().uuid(),
+  answers: z.record(z.string().uuid(), z.string().max(20000)),
+});
+
+export const saveDraftAnswersFn = createServerFn({ method: "POST" })
+  .middleware([requireDbAuth])
+  .inputValidator((d: unknown) => DraftInput.parse(d))
+  .handler(async ({ data, context }) => {
+    await saveDraftAnswersInDb({
+      assignmentId: data.assignmentId,
+      attemptId: data.attemptId,
+      userId: context.userId,
+      answers: data.answers,
+    });
+    return { ok: true as const };
+  });
 
 export const gradeAndSubmitAttempt = createServerFn({ method: "POST" })
   .middleware([requireDbAuth])

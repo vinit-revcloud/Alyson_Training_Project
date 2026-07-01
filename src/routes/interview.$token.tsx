@@ -397,6 +397,8 @@ function TestStep({
   const [submitted, setSubmitted] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const autoSubmitTriggered = useRef(false);
+  const autoSubmitAttempts = useRef(0);
+  const [autoSubmitFailed, setAutoSubmitFailed] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hydratedRef = useRef(false);
   const answersRef = useRef(answers);
@@ -519,11 +521,26 @@ function TestStep({
   });
 
   useEffect(() => {
-    if (timeUp && !submitted && !submit.isPending && !autoSubmitTriggered.current) {
-      autoSubmitTriggered.current = true;
-      toast.warning("Time is up — submitting your answers.");
-      submit.mutate();
+    if (!timeUp || submitted || submit.isPending) return;
+    if (autoSubmitAttempts.current >= 3) {
+      setAutoSubmitFailed(true);
+      return;
     }
+    if (autoSubmitTriggered.current) return;
+    autoSubmitTriggered.current = true;
+    autoSubmitAttempts.current += 1;
+    toast.warning("Time is up — submitting your answers.");
+    submit.mutate(undefined, {
+      onSettled: (_data, error) => {
+        autoSubmitTriggered.current = false;
+        if (error) {
+          if (autoSubmitAttempts.current >= 3) {
+            setAutoSubmitFailed(true);
+            toast.error("Auto-submit failed — use Submit test to finish.");
+          }
+        }
+      },
+    });
   }, [timeUp, submitted, submit.isPending]);
 
   const formatRemaining = (ms: number) => {
@@ -598,11 +615,17 @@ function TestStep({
         <div className="sticky bottom-4 flex justify-end">
           <Button
             className="gap-2"
-            disabled={submit.isPending || timeUp}
+            disabled={submit.isPending || (timeUp && !autoSubmitFailed)}
             onClick={() => submit.mutate()}
           >
             <CheckCircle2 className="h-4 w-4" />
-            {submit.isPending ? "Submitting…" : timeUp ? "Submitting…" : "Submit test"}
+            {submit.isPending
+              ? "Submitting…"
+              : timeUp && !autoSubmitFailed
+                ? "Submitting…"
+                : timeUp
+                  ? "Submit now"
+                  : "Submit test"}
           </Button>
         </div>
       </main>

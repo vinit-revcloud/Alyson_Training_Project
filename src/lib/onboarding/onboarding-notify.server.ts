@@ -5,6 +5,7 @@ import {
   findNotificationLogByIdempotency,
   getEmailTemplate,
   insertNotificationLog,
+  updateNotificationLog,
 } from "@/lib/email/email-db.server";
 import { substitute, type PlaceholderKey } from "@/lib/email/render";
 
@@ -37,15 +38,24 @@ async function enqueueTemplateEmail(input: {
     idempotency_key: input.idempotencyKey,
   });
 
-  await enqueueEmail(QUEUE, {
-    to: input.toEmail,
-    subject,
-    html,
-    label: input.templateKey,
-    notification_log_id: logId,
-    idempotency_key: input.idempotencyKey,
-    queued_at: new Date().toISOString(),
-  });
+  try {
+    const queueId = await enqueueEmail(QUEUE, {
+      to: input.toEmail,
+      subject,
+      html,
+      label: input.templateKey,
+      notification_log_id: logId,
+      idempotency_key: input.idempotencyKey,
+      queued_at: new Date().toISOString(),
+    });
+    if (!queueId) {
+      await updateNotificationLog(logId, { status: "failed" });
+      return false;
+    }
+  } catch {
+    await updateNotificationLog(logId, { status: "failed" });
+    return false;
+  }
   return true;
 }
 

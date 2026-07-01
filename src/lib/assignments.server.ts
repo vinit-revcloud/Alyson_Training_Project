@@ -277,6 +277,23 @@ export async function autoAssignCourseToDepartmentInDb(
       );
     }
 
+    let assignmentsCreated = 0;
+    const newAssignmentIds: string[] = [];
+    const inserted = await client.query<{ id: string }>(
+      `INSERT INTO assessment_assignments (learner_user_id, assessment_id, course_id, source)
+       SELECT DISTINCT p.user_id, a.id, $1, 'auto_department'
+       FROM profiles p
+       JOIN user_roles ur ON ur.user_id = p.user_id AND ur.role = 'trainee'
+       JOIN assessments a ON a.is_primary = true AND a.status IN ('validated', 'published')
+       JOIN classes cl ON cl.id = a.class_id AND cl.course_id = $1
+       WHERE p.department = $2
+       ON CONFLICT (learner_user_id, assessment_id) DO NOTHING
+       RETURNING id`,
+      [courseId, trimmedDept],
+    );
+    assignmentsCreated = inserted.rowCount ?? 0;
+    newAssignmentIds.push(...inserted.rows.map((r) => r.id));
+
     const { rows: members } = await client.query<{ user_id: string }>(
       `SELECT DISTINCT p.user_id
        FROM profiles p
@@ -284,24 +301,6 @@ export async function autoAssignCourseToDepartmentInDb(
        WHERE p.department = $1`,
       [trimmedDept],
     );
-
-    let assignmentsCreated = 0;
-    const newAssignmentIds: string[] = [];
-    for (const m of members) {
-      const { rows } = await client.query<{ id: string }>(
-        `INSERT INTO assessment_assignments (learner_user_id, assessment_id, course_id, source)
-         SELECT $2, a.id, $1, 'auto_department'
-         FROM assessments a
-         JOIN classes cl ON cl.id = a.class_id
-         WHERE cl.course_id = $1 AND a.is_primary = true
-           AND a.status IN ('validated', 'published')
-         ON CONFLICT (learner_user_id, assessment_id) DO NOTHING
-         RETURNING id`,
-        [courseId, m.user_id],
-      );
-      assignmentsCreated += rows.length;
-      newAssignmentIds.push(...rows.map((r) => r.id));
-    }
 
     await client.query("COMMIT");
     return { usersTouched: members.length, assignmentsCreated, newAssignmentIds };

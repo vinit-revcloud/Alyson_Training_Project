@@ -130,6 +130,42 @@ export async function getActiveAttemptFromDb(
   return { attemptId, answers };
 }
 
+export async function saveDraftAnswersInDb(input: {
+  assignmentId: string;
+  attemptId: string;
+  userId: string;
+  answers: Record<string, string>;
+}): Promise<void> {
+  const pool = getPgPool();
+  const { rows } = await pool.query<{ id: string }>(
+    `SELECT att.id
+     FROM assessment_attempts att
+     JOIN candidates c ON c.id = att.candidate_id
+     JOIN assessment_assignments aa ON aa.assessment_id = att.assessment_id
+     WHERE att.id = $1
+       AND aa.id = $2
+       AND c.user_id = $3
+       AND att.status = 'in_progress'`,
+    [input.attemptId, input.assignmentId, input.userId],
+  );
+  if (!rows[0]?.id) {
+    throw new Error("No active attempt to save");
+  }
+
+  for (const [questionId, answer] of Object.entries(input.answers)) {
+    const upd = await pool.query(
+      `UPDATE attempt_answers SET answer = $3 WHERE attempt_id = $1 AND question_id = $2`,
+      [input.attemptId, questionId, answer],
+    );
+    if (!upd.rowCount) {
+      await pool.query(
+        `INSERT INTO attempt_answers (attempt_id, question_id, answer) VALUES ($1, $2, $3)`,
+        [input.attemptId, questionId, answer],
+      );
+    }
+  }
+}
+
 async function ensureCandidateId(client: PoolClient, userId: string): Promise<string> {
   const existing = await client.query<{ id: string }>(
     `SELECT id FROM candidates WHERE user_id = $1`,
@@ -160,7 +196,13 @@ export async function startAttemptInDb(assignmentId: string, userId: string): Pr
   try {
     await client.query("BEGIN");
 
-    const assignment = await loadAssignmentForLearner(client, assignmentId, userId);
+    const assignmentRes = await client.query<LearnerAssignmentRow>(
+      `SELECT * FROM assessment_assignments
+       WHERE id = $1 AND learner_user_id = $2
+       FOR UPDATE`,
+      [assignmentId, userId],
+    );
+    const assignment = assignmentRes.rows[0];
     if (!assignment) throw new Error("Assignment not found");
     if (new Date(assignment.due_at).getTime() <= Date.now()) {
       throw new Error("This assignment has expired.");
@@ -180,7 +222,8 @@ export async function startAttemptInDb(assignmentId: string, userId: string): Pr
          AND att.assessment_id = $2
          AND att.status = 'in_progress'
        ORDER BY att.started_at DESC
-       LIMIT 1`,
+       LIMIT 1
+       FOR UPDATE`,
       [userId, assignment.assessment_id],
     );
     if (active.rows[0]?.id) {
@@ -190,13 +233,36 @@ export async function startAttemptInDb(assignmentId: string, userId: string): Pr
 
     const candidateId = await ensureCandidateId(client, userId);
     const nextAttemptNo = assignment.attempts_used + 1;
-    const created = await client.query<{ id: string }>(
-      `INSERT INTO assessment_attempts (assessment_id, candidate_id, attempt_number, status)
-       VALUES ($1, $2, $3, 'in_progress')
-       RETURNING id`,
-      [assignment.assessment_id, candidateId, nextAttemptNo],
-    );
-    const attemptId = created.rows[0]!.id;
+    let attemptId: string;
+    try {
+      const created = await client.query<{ id: string }>(
+        `INSERT INTO assessment_attempts (assessment_id, candidate_id, attempt_number, status)
+         VALUES ($1, $2, $3, 'in_progress')
+         RETURNING id`,
+        [assignment.assessment_id, candidateId, nextAttemptNo],
+      );
+      attemptId = created.rows[0]!.id;
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code;
+      if (code === "23505") {
+        const retry = await client.query<{ id: string }>(
+          `SELECT att.id
+           FROM assessment_attempts att
+           JOIN candidates c ON c.id = att.candidate_id
+           WHERE c.user_id = $1
+             AND att.assessment_id = $2
+             AND att.status = 'in_progress'
+           ORDER BY att.started_at DESC
+           LIMIT 1`,
+          [userId, assignment.assessment_id],
+        );
+        if (retry.rows[0]?.id) {
+          await client.query("COMMIT");
+          return retry.rows[0].id;
+        }
+      }
+      throw err;
+    }
 
     if (assignment.status === "assigned") {
       await client.query(
@@ -220,13 +286,19 @@ export async function gradeAndSubmitAttemptInDb(input: {
   attemptId: string;
   userId: string;
   answers: Record<string, string>;
-}): Promise<{ score: number; passed: boolean }> {
+}): Promise<{ score: number; passed: boolean; alreadySubmitted?: boolean }> {
   const pool = getPgPool();
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
 
-    const assignment = await loadAssignmentForLearner(client, input.assignmentId, input.userId);
+    const assignmentRes = await client.query<LearnerAssignmentRow>(
+      `SELECT * FROM assessment_assignments
+       WHERE id = $1 AND learner_user_id = $2
+       FOR UPDATE`,
+      [input.assignmentId, input.userId],
+    );
+    const assignment = assignmentRes.rows[0];
     if (!assignment) throw new Error("Assignment not found");
     if (new Date(assignment.due_at).getTime() <= Date.now()) {
       throw new Error("Time expired — submissions are frozen.");
@@ -237,11 +309,14 @@ export async function gradeAndSubmitAttemptInDb(input: {
       assessment_id: string;
       status: string;
       user_id: string;
+      score: number | null;
+      passed: boolean | null;
     }>(
-      `SELECT att.id, att.assessment_id, att.status, c.user_id
+      `SELECT att.id, att.assessment_id, att.status, c.user_id, att.score, att.passed
        FROM assessment_attempts att
        JOIN candidates c ON c.id = att.candidate_id
-       WHERE att.id = $1`,
+       WHERE att.id = $1
+       FOR UPDATE`,
       [input.attemptId],
     );
     const attempt = attemptRes.rows[0];
@@ -251,6 +326,14 @@ export async function gradeAndSubmitAttemptInDb(input: {
       throw new Error("Attempt does not match assignment");
     }
     if (attempt.status !== "in_progress") {
+      if (attempt.status === "graded" || attempt.status === "submitted") {
+        await client.query("COMMIT");
+        return {
+          score: Number(attempt.score ?? 0),
+          passed: Boolean(attempt.passed),
+          alreadySubmitted: true,
+        };
+      }
       throw new Error("This attempt has already been submitted.");
     }
 

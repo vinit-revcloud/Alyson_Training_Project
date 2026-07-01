@@ -8,6 +8,7 @@ import {
   deleteSectionAssetInDb,
   deleteSectionInDb,
   deleteClassInDb,
+  deleteCourseInDb,
   getClassAssessmentSeedFromDb,
   getClassFromDb,
   getCourseFromDb,
@@ -189,6 +190,11 @@ export const deleteClassFn = createServerFn({ method: "POST" })
     await deleteClassInDb(data.classId);
     return { ok: true as const };
   });
+
+export const deleteCourseFn = createServerFn({ method: "POST" })
+  .middleware([requireContentManager])
+  .inputValidator((data: unknown) => CourseIdSchema.parse(data))
+  .handler(async ({ data }) => deleteCourseInDb(data.courseId));
 
 const InsertSectionAssetSchema = z.object({
   sectionId: z.string().uuid(),

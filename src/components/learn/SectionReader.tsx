@@ -1,8 +1,12 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { ChevronDown, ChevronRight, FileText, ExternalLink } from "lucide-react";
+import { useServerFn } from "@tanstack/react-start";
 import { Badge } from "@/components/ui/badge";
 import type { SectionContent } from "@/lib/onboarding/onboarding-nav.server";
 import { LearnGuideToc } from "@/components/learn/LearnGuideToc";
+import { getSignedAssetUrlFn } from "@/lib/asset.functions";
+import type { AssetBucket } from "@/lib/asset-storage.shared";
+import { useRefreshableAssetUrl } from "@/lib/useRefreshableAssetUrl";
 
 function isEmbedVideo(url: string): boolean {
   return /youtube\.com|youtu\.be|vimeo\.com/i.test(url);
@@ -46,7 +50,15 @@ function StoredVideo({ url }: { url: string }) {
   );
 }
 
-function StoredDocument({ url, label }: { url: string; label: string }) {
+function StoredDocument({
+  url,
+  label,
+  onError,
+}: {
+  url: string;
+  label: string;
+  onError?: () => void;
+}) {
   const isPdf =
     label.toLowerCase().includes(".pdf") ||
     url.toLowerCase().includes(".pdf") ||
@@ -67,10 +79,66 @@ function StoredDocument({ url, label }: { url: string; label: string }) {
         <iframe
           src={url}
           title={label}
+          onError={onError}
           className="mt-3 h-96 w-full rounded-lg border border-[var(--learn-border)]"
         />
       ) : null}
     </div>
+  );
+}
+
+function RefreshableStoredDocument({
+  initialUrl,
+  bucket,
+  storagePath,
+  label,
+}: {
+  initialUrl: string;
+  bucket: AssetBucket;
+  storagePath: string;
+  label: string;
+}) {
+  const signFn = useServerFn(getSignedAssetUrlFn);
+  const resign = useCallback(async () => {
+    try {
+      const { url } = await signFn({ data: { bucket, storagePath, expiresIn: 3600 } });
+      return url;
+    } catch {
+      return null;
+    }
+  }, [signFn, bucket, storagePath]);
+  const { url, onMediaError } = useRefreshableAssetUrl(initialUrl, resign);
+  if (!url) return <AssetUnavailable kind="document" />;
+  return <StoredDocument url={url} label={label} onError={onMediaError} />;
+}
+
+function RefreshableStoredVideo({
+  initialUrl,
+  bucket,
+  storagePath,
+}: {
+  initialUrl: string;
+  bucket: AssetBucket;
+  storagePath: string;
+}) {
+  const signFn = useServerFn(getSignedAssetUrlFn);
+  const resign = useCallback(async () => {
+    try {
+      const { url } = await signFn({ data: { bucket, storagePath, expiresIn: 3600 } });
+      return url;
+    } catch {
+      return null;
+    }
+  }, [signFn, bucket, storagePath]);
+  const { url, onMediaError } = useRefreshableAssetUrl(initialUrl, resign);
+  if (!url) return <AssetUnavailable kind="video" />;
+  return (
+    <video
+      src={url}
+      controls
+      onError={onMediaError}
+      className="aspect-video w-full rounded-[10px] border border-[var(--learn-border)] bg-black"
+    />
   );
 }
 
@@ -101,6 +169,15 @@ function SectionAssetBlock({
       );
     }
     if (kind === "video" || asset.storageBucket) {
+      if (asset.storageBucket && asset.storagePath) {
+        return (
+          <RefreshableStoredVideo
+            initialUrl={url}
+            bucket={asset.storageBucket as AssetBucket}
+            storagePath={asset.storagePath}
+          />
+        );
+      }
       return <StoredVideo url={url} />;
     }
     return (
@@ -110,6 +187,16 @@ function SectionAssetBlock({
 
   if (kind === "document") {
     if (asset.unavailable) return <AssetUnavailable kind="document" />;
+    if (url && asset.storageBucket && asset.storagePath) {
+      return (
+        <RefreshableStoredDocument
+          initialUrl={url}
+          bucket={asset.storageBucket as AssetBucket}
+          storagePath={asset.storagePath}
+          label={asset.label}
+        />
+      );
+    }
     if (url) return <StoredDocument url={url} label={asset.label} />;
     return null;
   }

@@ -9,6 +9,7 @@ import {
   deleteSectionAssetFn,
   deleteSectionFn,
   deleteClassFn,
+  deleteCourseFn,
   getClassAssessmentSeedFn,
   getClassFn,
   getCourseFn,
@@ -320,6 +321,10 @@ export async function deleteSection(sectionId: string): Promise<void> {
 
 export async function deleteClass(classId: string): Promise<void> {
   await deleteClassFn({ data: { classId } });
+}
+
+export async function deleteCourse(courseId: string): Promise<{ deletedClasses: number }> {
+  return deleteCourseFn({ data: { courseId } });
 }
 
 export async function uploadSectionAsset(

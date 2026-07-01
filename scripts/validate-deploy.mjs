@@ -81,6 +81,12 @@ if (isProdCheck && !appBaseUrl && !process.env.VERCEL_URL && !isVercelCheck) {
   errors.push("APP_BASE_URL is required in production (or deploy on Vercel with VERCEL_URL)");
 }
 
+if (isProdCheck && env("DATABASE_URL") && !env("DATABASE_URL").includes("-pooler") && !env("DATABASE_URL").includes("pooler.")) {
+  warnings.push(
+    "DATABASE_URL should use Neon connection pooler host (-pooler) for Vercel/serverless — direct connections exhaust free tier limits",
+  );
+}
+
 if (process.env.EMAIL_AUTO_PROCESS === "1" && isProdCheck) {
   errors.push("EMAIL_AUTO_PROCESS must be unset or 0 in production");
 }

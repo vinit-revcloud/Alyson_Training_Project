@@ -34,6 +34,7 @@
     "db:apply-enterprise": "node scripts/apply-enterprise-schema.mjs",
     "db:apply-paper-only": "node scripts/apply-paper-only-schema.mjs",
     "db:apply-scale-indexes": "node scripts/apply-scale-indexes.mjs",
+    "db:apply-scale-reliability": "node scripts/apply-scale-reliability.mjs",
     "db:apply-pipeline": "node scripts/apply-pipeline-schema.mjs",
     "db:apply-onboarding-seeds": "node scripts/apply-onboarding-seeds.mjs",
     "db:apply-onboarding-learner": "node scripts/apply-onboarding-learner-panel.mjs",
