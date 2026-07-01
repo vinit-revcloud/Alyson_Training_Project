@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 
 import { getSignedAssetUrlFn } from "@/lib/asset.functions";
 import type { AssetBucket } from "@/lib/asset-storage.shared";
@@ -11,11 +12,12 @@ type SignedAssetImageProps = {
 };
 
 export function SignedAssetImage({ bucket, storagePath, alt, className }: SignedAssetImageProps) {
+  const signFn = useServerFn(getSignedAssetUrlFn);
   const [src, setSrc] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    void getSignedAssetUrlFn({ data: { bucket, storagePath } })
+    void signFn({ data: { bucket, storagePath } })
       .then(({ url }) => {
         if (!cancelled) setSrc(url);
       })
@@ -25,7 +27,7 @@ export function SignedAssetImage({ bucket, storagePath, alt, className }: Signed
     return () => {
       cancelled = true;
     };
-  }, [bucket, storagePath]);
+  }, [bucket, storagePath, signFn]);
 
   if (!src) {
     return <div className={className} aria-label={alt} />;

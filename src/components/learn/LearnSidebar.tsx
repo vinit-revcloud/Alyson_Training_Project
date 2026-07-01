@@ -71,6 +71,9 @@ function CourseNav({ course }: { course: OnboardingNavCourse }) {
       </button>
       {open ? (
         <ul className="ml-4 border-l border-[var(--learn-border)] pl-2">
+          {course.sections.length === 0 ? (
+            <li className="px-2 py-1 text-[10px] text-muted-foreground">No modules published yet</li>
+          ) : null}
           {course.sections.map((sec) => {
             const href = `/learn/guide/${sec.courseId}/${sec.id}`;
             const active = pathname === href;

@@ -1,5 +1,6 @@
 import { getPgPool } from "@/lib/pg.server";
 import { assetPublicUrl, type AssetBucket } from "@/lib/asset-storage.shared";
+import { getLearnerVisibleCoursesForUser } from "@/lib/learn-access.server";
 
 export interface OnboardingNavSection {
   id: string;
@@ -40,44 +41,7 @@ export interface LearnerDashboardStats {
 
 export async function buildOnboardingNavForUser(userId: string): Promise<OnboardingNavTree> {
   const pool = getPgPool();
-  const profileRes = await pool.query<{ department: string | null }>(
-    `SELECT department FROM profiles WHERE user_id = $1`,
-    [userId],
-  );
-  const department = profileRes.rows[0]?.department;
-
-  const pathRes = await pool.query<{ course_id: string }>(
-    `SELECT course_id FROM learner_path_assignments WHERE user_id = $1`,
-    [userId],
-  );
-  const assignedCourseIds = pathRes.rows.map((r) => r.course_id);
-
-  let coursesQuery: string;
-  let coursesParams: unknown[];
-  if (assignedCourseIds.length > 0) {
-    coursesQuery = `SELECT id, title, is_core_onboarding FROM courses
-      WHERE status = 'published' AND id = ANY($1::uuid[])
-      ORDER BY is_core_onboarding DESC, title ASC`;
-    coursesParams = [assignedCourseIds];
-  } else if (department) {
-    coursesQuery = `SELECT id, title, is_core_onboarding FROM courses
-      WHERE status = 'published'
-        AND (is_core_onboarding = true
-          OR id IN (SELECT course_id FROM course_departments WHERE department = $1))
-      ORDER BY title ASC`;
-    coursesParams = [department];
-  } else {
-    coursesQuery = `SELECT id, title, is_core_onboarding FROM courses
-      WHERE status = 'published' AND is_core_onboarding = true
-      ORDER BY title ASC`;
-    coursesParams = [];
-  }
-
-  const coursesRes = await pool.query<{
-    id: string;
-    title: string;
-    is_core_onboarding: boolean;
-  }>(coursesQuery, coursesParams);
+  const coursesRes = { rows: await getLearnerVisibleCoursesForUser(userId) };
 
   const progressRes = await pool.query<{ section_id: string }>(
     `SELECT section_id FROM learner_item_progress
@@ -132,7 +96,9 @@ export async function buildOnboardingNavForUser(userId: string): Promise<Onboard
     };
   };
 
-  const all = await Promise.all(coursesRes.rows.map(buildCourse));
+  const all = (await Promise.all(coursesRes.rows.map(buildCourse))).filter(
+    (c) => c.sections.length > 0,
+  );
   return {
     coreCourses: all.filter((c) => c.isCore),
     roleCourses: all.filter((c) => !c.isCore),
@@ -258,6 +224,8 @@ export interface SectionContent {
     storageBucket: string | null;
     storagePath: string | null;
     extractedText: string | null;
+    /** Set when storage-backed asset exists in DB but signing or storage lookup failed. */
+    unavailable?: boolean;
   }>;
 }
 

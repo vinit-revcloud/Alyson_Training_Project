@@ -1,11 +1,8 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ChevronDown, ChevronRight, FileText, ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { getSignedAssetUrlFn } from "@/lib/asset.functions";
-import type { AssetBucket } from "@/lib/asset-storage.shared";
 import type { SectionContent } from "@/lib/onboarding/onboarding-nav.server";
 import { LearnGuideToc } from "@/components/learn/LearnGuideToc";
-import { cn } from "@/lib/utils";
 
 function isEmbedVideo(url: string): boolean {
   return /youtube\.com|youtu\.be|vimeo\.com/i.test(url);
@@ -31,70 +28,33 @@ function embedUrl(url: string): string | null {
   return null;
 }
 
-function SignedMedia({
-  bucket,
-  storagePath,
-  kind,
-  label,
-}: {
-  bucket: AssetBucket;
-  storagePath: string;
-  kind: "video" | "document";
-  label: string;
-}) {
-  const [src, setSrc] = useState<string | null>(null);
-  const [failed, setFailed] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    setFailed(false);
-    setSrc(null);
-    void getSignedAssetUrlFn({ data: { bucket, storagePath } })
-      .then(({ url }) => {
-        if (!cancelled) setSrc(url);
-      })
-      .catch(() => {
-        if (!cancelled) setFailed(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [bucket, storagePath]);
+function AssetUnavailable({ kind }: { kind: "document" | "video" }) {
+  return (
+    <div className="rounded-[10px] border border-dashed border-[var(--learn-border)] bg-muted/40 p-4 text-sm text-muted-foreground">
+      {kind === "video" ? "Video" : "Document"} unavailable. Ask your trainer to re-upload this file.
+    </div>
+  );
+}
 
-  if (failed) {
-    return (
-      <div className="rounded-[10px] border border-dashed border-[var(--learn-border)] bg-muted/40 p-4 text-sm text-muted-foreground">
-        Document unavailable. Ask your trainer to re-upload this file.
-      </div>
-    );
-  }
+function StoredVideo({ url }: { url: string }) {
+  return (
+    <video
+      src={url}
+      controls
+      className="aspect-video w-full rounded-[10px] border border-[var(--learn-border)] bg-black"
+    />
+  );
+}
 
-  if (!src) {
-    return (
-      <div
-        className={
-          kind === "video"
-            ? "aspect-video animate-pulse rounded-[10px] bg-muted"
-            : "h-24 animate-pulse rounded-[10px] bg-muted"
-        }
-      />
-    );
-  }
-
-  if (kind === "video") {
-    return (
-      <video
-        src={src}
-        controls
-        className="aspect-video w-full rounded-[10px] border border-[var(--learn-border)] bg-black"
-      />
-    );
-  }
-
-  const isPdf = label.toLowerCase().includes(".pdf") || src.toLowerCase().includes(".pdf");
+function StoredDocument({ url, label }: { url: string; label: string }) {
+  const isPdf =
+    label.toLowerCase().includes(".pdf") ||
+    url.toLowerCase().includes(".pdf") ||
+    url.toLowerCase().includes("application/pdf");
   return (
     <div className="learn-card rounded-[10px] border border-[var(--learn-border)] p-4">
       <a
-        href={src}
+        href={url}
         target="_blank"
         rel="noreferrer"
         className="inline-flex items-center gap-2 text-sm font-medium text-[var(--learn-accent)] hover:underline"
@@ -105,17 +65,13 @@ function SignedMedia({
       </a>
       {isPdf ? (
         <iframe
-          src={src}
+          src={url}
           title={label}
           className="mt-3 h-96 w-full rounded-lg border border-[var(--learn-border)]"
         />
       ) : null}
     </div>
   );
-}
-
-function SignedVideo({ bucket, storagePath }: { bucket: AssetBucket; storagePath: string }) {
-  return <SignedMedia bucket={bucket} storagePath={storagePath} kind="video" label="Video" />;
 }
 
 function SectionAssetBlock({
@@ -126,7 +82,10 @@ function SectionAssetBlock({
   const kind = asset.kind;
   const url = asset.url;
 
-  if ((kind === "video" || kind === "video_link") && url) {
+  if ((kind === "video" || kind === "video_link") && (url || asset.unavailable)) {
+    if (asset.unavailable) return <AssetUnavailable kind="video" />;
+    if (!url) return null;
+
     const embed = isEmbedVideo(url) ? embedUrl(url) : null;
     if (embed) {
       return (
@@ -141,13 +100,8 @@ function SectionAssetBlock({
         </div>
       );
     }
-    if (asset.storageBucket && asset.storagePath) {
-      return (
-        <SignedVideo
-          bucket={asset.storageBucket as AssetBucket}
-          storagePath={asset.storagePath}
-        />
-      );
+    if (kind === "video" || asset.storageBucket) {
+      return <StoredVideo url={url} />;
     }
     return (
       <video src={url} controls className="aspect-video w-full rounded-[10px] border border-[var(--learn-border)]" />
@@ -155,39 +109,13 @@ function SectionAssetBlock({
   }
 
   if (kind === "document") {
-    if (asset.storageBucket && asset.storagePath) {
-      return (
-        <SignedMedia
-          bucket={asset.storageBucket as AssetBucket}
-          storagePath={asset.storagePath}
-          kind="document"
-          label={asset.label}
-        />
-      );
-    }
-    if (!url) return null;
-    const isPdf = url.toLowerCase().includes(".pdf") || asset.label.toLowerCase().includes("pdf");
-    return (
-      <div className="learn-card rounded-[10px] border border-[var(--learn-border)] p-4">
-        <a
-          href={url}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-2 text-sm font-medium text-[var(--learn-accent)] hover:underline"
-        >
-          <FileText className="h-4 w-4" />
-          {asset.label || "Document"}
-          <ExternalLink className="h-3 w-3" />
-        </a>
-        {isPdf ? (
-          <iframe src={url} title={asset.label} className="mt-3 h-96 w-full rounded-lg border border-[var(--learn-border)]" />
-        ) : null}
-      </div>
-    );
+    if (asset.unavailable) return <AssetUnavailable kind="document" />;
+    if (url) return <StoredDocument url={url} label={asset.label} />;
+    return null;
   }
 
   if (kind === "transcript") {
-    return <TranscriptPanel label={asset.label} text={asset.extractedText} url={url} />;
+    return <TranscriptPanel label={asset.label} text={asset.extractedText} url={url} unavailable={asset.unavailable} />;
   }
 
   if (url) {
@@ -204,10 +132,12 @@ function TranscriptPanel({
   label,
   text,
   url,
+  unavailable,
 }: {
   label: string;
   text: string | null;
   url: string | null;
+  unavailable?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -224,6 +154,8 @@ function TranscriptPanel({
         <div className="border-t border-[var(--learn-border)] px-4 pb-4 text-sm text-muted-foreground">
           {text ? (
             <p className="whitespace-pre-wrap pt-3">{text}</p>
+          ) : unavailable ? (
+            <p className="pt-3">Transcript unavailable. Ask your trainer to re-upload this file.</p>
           ) : url ? (
             <a href={url} target="_blank" rel="noreferrer" className="pt-3 text-[var(--learn-accent)] hover:underline">
               Open transcript

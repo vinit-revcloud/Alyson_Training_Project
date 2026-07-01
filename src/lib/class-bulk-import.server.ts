@@ -2,6 +2,11 @@ import type { PoolClient } from "pg";
 import { getPgPool } from "@/lib/pg.server";
 import type { BulkClassInput, BulkImportPayload } from "@/lib/class-bulk-import.shared";
 import { normalizeBulkClass } from "@/lib/class-bulk-import.shared";
+import { cacheExtractedTextForSectionAsset } from "@/lib/asset-extract-cache.server";
+import {
+  ingestExternalAssetUrl,
+  type IngestedExternalAsset,
+} from "@/lib/external-asset-ingest.server";
 
 export interface BulkCreateResult {
   courseId: string;
@@ -35,6 +40,55 @@ async function insertExternalAsset(
      VALUES ($1, $2, $3, $4)`,
     [sectionId, kind, url, fileName],
   );
+}
+
+async function insertStorageAsset(
+  client: PoolClient,
+  sectionId: string,
+  kind: "document" | "transcript",
+  ingested: IngestedExternalAsset,
+): Promise<string> {
+  const res = await client.query<{ id: string }>(
+    `INSERT INTO section_assets (
+      section_id, kind, storage_bucket, storage_path, file_name, mime_type, size_bytes
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+    RETURNING id`,
+    [
+      sectionId,
+      kind,
+      ingested.storageBucket,
+      ingested.storagePath,
+      ingested.fileName,
+      ingested.mimeType,
+      ingested.sizeBytes,
+    ],
+  );
+  return res.rows[0].id;
+}
+
+async function insertDocumentOrTranscript(
+  client: PoolClient,
+  classId: string,
+  sectionId: string,
+  kind: "document" | "transcript",
+  url: string,
+): Promise<void> {
+  const ingested = await ingestExternalAssetUrl({ classId, sectionId, kind, url });
+  if (ingested) {
+    const assetId = await insertStorageAsset(client, sectionId, kind, ingested);
+    await cacheExtractedTextForSectionAsset({
+      assetId,
+      kind,
+      fileName: ingested.fileName,
+      storageBucket: ingested.storageBucket,
+      storagePath: ingested.storagePath,
+    });
+    return;
+  }
+  console.warn(
+    `[bulk-import] Could not ingest ${kind} URL to storage — keeping external link: ${url.slice(0, 120)}`,
+  );
+  await insertExternalAsset(client, sectionId, kind, url);
 }
 
 async function insertClassWithSections(
@@ -83,10 +137,10 @@ async function insertClassWithSections(
       await insertExternalAsset(client, sectionId, "video_link", sec.videoLink);
     }
     for (const docUrl of sec.documentLinks) {
-      await insertExternalAsset(client, sectionId, "document", docUrl);
+      await insertDocumentOrTranscript(client, classId, sectionId, "document", docUrl);
     }
     if (sec.transcriptionLink) {
-      await insertExternalAsset(client, sectionId, "transcript", sec.transcriptionLink);
+      await insertDocumentOrTranscript(client, classId, sectionId, "transcript", sec.transcriptionLink);
     }
   }
 

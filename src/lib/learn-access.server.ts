@@ -1,6 +1,49 @@
 import { getPgPool } from "@/lib/pg.server";
 import { userHasContentManagerRole } from "@/lib/content-manager.server";
 
+export interface LearnerVisibleCourse {
+  id: string;
+  title: string;
+  is_core_onboarding: boolean;
+}
+
+/** Published courses with at least one published class section — for learner nav/dashboard. */
+export async function getLearnerVisibleCoursesForUser(
+  userId: string,
+): Promise<LearnerVisibleCourse[]> {
+  const pool = getPgPool();
+
+  if (await userHasContentManagerRole(userId)) {
+    const { rows } = await pool.query<LearnerVisibleCourse>(
+      `SELECT DISTINCT c.id, c.title, c.is_core_onboarding
+       FROM courses c
+       JOIN classes cl ON cl.course_id = c.id AND cl.status = 'published'
+       JOIN sections s ON s.class_id = cl.id
+       WHERE c.status = 'published'
+       ORDER BY c.is_core_onboarding DESC, c.title ASC`,
+    );
+    return rows;
+  }
+
+  const accessible = [...(await getAccessibleCourseIdsForUser(userId))];
+  if (!accessible.length) return [];
+
+  const { rows } = await pool.query<LearnerVisibleCourse>(
+    `SELECT c.id, c.title, c.is_core_onboarding
+     FROM courses c
+     WHERE c.id = ANY($1::uuid[])
+       AND c.status = 'published'
+       AND EXISTS (
+         SELECT 1 FROM sections s
+         JOIN classes cl ON cl.id = s.class_id
+         WHERE cl.course_id = c.id AND cl.status = 'published'
+       )
+     ORDER BY c.is_core_onboarding DESC, c.title ASC`,
+    [accessible],
+  );
+  return rows;
+}
+
 /** Course IDs a learner may access (core onboarding, department, assigned paths). */
 export async function getAccessibleCourseIdsForUser(userId: string): Promise<Set<string>> {
   const pool = getPgPool();
