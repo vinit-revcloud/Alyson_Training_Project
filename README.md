@@ -6,6 +6,7 @@ Internal training and **hiring assessment** platform for Cintara. HR and hiring 
 
 | Audience | Start here |
 |----------|------------|
+| **Everyone (full guide)** | **[docs/PLATFORM_USAGE_GUIDE.md](docs/PLATFORM_USAGE_GUIDE.md)** — implementation + role-based usage |
 | **Deploy / DevOps** | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) · **[Vercel → docs/VERCEL_DEPLOY.md](docs/VERCEL_DEPLOY.md)** |
 | **HR & Hiring Managers** | [docs/HR_ROLLOUT.md](docs/HR_ROLLOUT.md) |
 | **Neon + Auth setup** | [docs/NEON_SETUP.md](docs/NEON_SETUP.md) |
