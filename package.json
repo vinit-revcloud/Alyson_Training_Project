@@ -31,6 +31,8 @@
     "email:cron": "node scripts/run-cron-tick.mjs",
     "db:apply-email-seeds": "node scripts/apply-email-seeds.mjs",
     "db:apply-email-queue-fix": "node scripts/apply-email-queue-fix.mjs",
+    "db:apply-disable-legacy-email-cron": "node scripts/apply-disable-legacy-email-cron.mjs",
+    "db:archive-stale-workflow-email-queue": "node scripts/archive-stale-workflow-email-queue.mjs",
     "db:apply-enterprise": "node scripts/apply-enterprise-schema.mjs",
     "db:apply-paper-only": "node scripts/apply-paper-only-schema.mjs",
     "db:apply-scale-indexes": "node scripts/apply-scale-indexes.mjs",

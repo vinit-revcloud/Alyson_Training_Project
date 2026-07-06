@@ -9,7 +9,7 @@ import {
   insertNotificationLog,
   updateNotificationLog,
 } from "@/lib/email/email-db.server";
-import { substitute, type PlaceholderKey } from "@/lib/email/render";
+import { renderTemplate, type PlaceholderKey } from "@/lib/email/render";
 import {
   type AssignmentEmailType,
   type EnqueueAssignmentEmailResult,
@@ -35,6 +35,9 @@ const SES_TEMPLATE_BY_EMAIL_TYPE: Record<AssignmentEmailType, string> = {
 };
 
 const QUEUE_NAME = "transactional_emails";
+
+/** Sent via direct SES drain (cron / EMAIL_AUTO_PROCESS). Step Functions deferred. */
+const TRANSACTIONAL_EMAIL_TYPES = new Set<AssignmentEmailType>(["initial", "retake"]);
 
 export type AssignmentEmailPlaceholders = Partial<Record<PlaceholderKey, string>>;
 
@@ -162,9 +165,17 @@ export async function enqueueAssignmentEmailInDb(
   }
 
   const tpl = await getEmailTemplate(templateKey);
-  const subject = tpl
-    ? substitute(tpl.subject, placeholders)
-    : `Assignment notification (${email_type})`;
+  if (!tpl) {
+    return { ok: false, error: `${templateKey} email template not found in database` };
+  }
+
+  const { subject, html } = renderTemplate({
+    subject: tpl.subject,
+    bodyMd: tpl.body_md,
+    vars: placeholders,
+  });
+  const messageId = globalThis.crypto?.randomUUID?.() ?? `${idempotencyKey}-${Date.now()}`;
+  const useTransactionalPath = TRANSACTIONAL_EMAIL_TYPES.has(email_type);
 
   let notificationLogId: string;
   try {
@@ -175,7 +186,7 @@ export async function enqueueAssignmentEmailInDb(
       audience: "learner",
       recipient_email: recipientEmail,
       subject,
-      status: "queued",
+      status: "pending",
       idempotency_key: idempotencyKey,
     });
   } catch (err) {
@@ -192,17 +203,27 @@ export async function enqueueAssignmentEmailInDb(
     return { ok: false, error: message };
   }
 
-  const payload = {
-    user_id,
-    assignment_id,
-    email_type,
-    template_name: templateName,
-    template_key: templateKey,
-    recipient_email: recipientEmail,
-    placeholders,
-    notification_log_id: notificationLogId,
-    queued_at: new Date().toISOString(),
-  };
+  const payload: Record<string, unknown> = useTransactionalPath
+    ? {
+        to: recipientEmail,
+        subject,
+        html,
+        label: templateKey,
+        message_id: messageId,
+        idempotency_key: idempotencyKey,
+        queued_at: new Date().toISOString(),
+      }
+    : {
+        user_id,
+        assignment_id,
+        email_type,
+        template_name: templateName,
+        template_key: templateKey,
+        recipient_email: recipientEmail,
+        placeholders,
+        notification_log_id: notificationLogId,
+        queued_at: new Date().toISOString(),
+      };
 
   try {
     const queueId = await enqueueEmail(QUEUE_NAME, payload);
@@ -214,11 +235,25 @@ export async function enqueueAssignmentEmailInDb(
       return { ok: false, error: "Failed to enqueue email — no queue id returned" };
     }
 
-    await triggerEmailWorkflow({
-      queueId,
-      payload,
-      emailType: email_type,
+    await updateNotificationLog(notificationLogId, {
+      status: "queued",
+      provider_message_id: messageId,
     });
+
+    if (!useTransactionalPath) {
+      await triggerEmailWorkflow({
+        queueId,
+        payload,
+        emailType: email_type,
+      });
+    } else if (process.env.EMAIL_AUTO_PROCESS === "1") {
+      try {
+        const { processEmailQueue } = await import("@/lib/email/process-queue");
+        await processEmailQueue();
+      } catch (e) {
+        console.warn("[email] assignment dev auto-process failed", e);
+      }
+    }
 
     return { ok: true, queued: true, queueId, notificationLogId };
   } catch (err) {

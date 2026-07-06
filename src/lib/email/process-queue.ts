@@ -1,8 +1,7 @@
 /**
- * Legacy in-app SES drain — replaced by AWS Step Functions workflow.
- * Assignment workflow emails are enqueue-only; Step Functions + Lambda send via SES.
- * Use only for manual local testing: Settings → Process queue, /api/internal/email/process,
- * or when EMAIL_AUTO_PROCESS=1 in development.
+ * In-app SES drain for transactional emails (invites, interviews, assignments).
+ * Workflow-shaped queue payloads (recipient_email + template_name, no html) are skipped
+ * until Step Functions is deployed. Drained by cron tick, EMAIL_AUTO_PROCESS=1, or manual process.
  */
 import { sesSend, SesSendError } from "./ses-send";
 import {
@@ -154,6 +153,14 @@ export async function processEmailQueue(): Promise<{
           error_message: "Recipient on suppression list",
         });
         await deleteEmailFromQueue(queue, msg.msg_id);
+        continue;
+      }
+
+      if (!to || !payload.subject || !payload.html) {
+        // Workflow-shaped payload — Step Functions sends these when Lambda is deployed
+        if (!process.env.EMAIL_WORKFLOW_LAMBDA_ARN?.trim()) {
+          await deleteEmailFromQueue(queue, msg.msg_id);
+        }
         continue;
       }
 

@@ -312,6 +312,11 @@ export async function runFinalizeClassCreation(
         console.info(
           `[finalize] auto-assigned ${assignResult.assignmentsCreated} assessment(s) to ${assignResult.usersTouched} trainee(s)`,
         );
+        const { notifyNewAssignments } = await import("@/lib/email/assignment-notify.server");
+        const emailsQueued = await notifyNewAssignments(assignResult.newAssignmentIds);
+        console.info(
+          `[finalize] assignment emails queued=${emailsQueued} assignments=${assignResult.newAssignmentIds.length}`,
+        );
       } else if (assignResult.usersTouched === 0) {
         warnings.push(
           `No trainees with department "${data.audience}" — set department on user profiles or use Assignments to assign manually.`,

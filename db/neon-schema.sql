@@ -671,8 +671,8 @@ ON CONFLICT (key) DO NOTHING;
 
 INSERT INTO public.notification_schedules (job_key, label, enabled, cron_expression, config) VALUES
   ('assignment_new', 'New assignment notice', true, 'on_event', '{"immediate": true}'::jsonb),
-  ('reminder_daily', 'Daily reminders', true, '0 9 * * *', '{"only_when_due_within_days": 1}'::jsonb),
-  ('escalation', 'Overdue escalations', true, '0 9 * * *',
+  ('reminder_daily', 'Daily reminders', false, '0 9 * * *', '{"only_when_due_within_days": 1}'::jsonb),
+  ('escalation', 'Overdue escalations', false, '0 9 * * *',
    '{"tiers":[{"days":7,"audiences":["learner"]},{"days":14,"audiences":["learner","hr"]},{"days":30,"audiences":["learner","hr","ceo","admin"]}]}'::jsonb),
   ('failure_retake', 'Failure / retake offer', true, 'on_event', '{"delay_hours": 0}'::jsonb),
   ('test_completed', 'Test submitted notice', true, 'on_event', '{}'::jsonb),

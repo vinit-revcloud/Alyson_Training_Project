@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { authorizeCronRequest, cronSecretConfigured } from "@/lib/cron-auth.server";
-/** Manual dev drain only — production sends via AWS Step Functions. */
+/** Drain transactional email queue via SES (invites, interviews, assignments). */
 import { processEmailQueue } from "@/lib/email/process-queue";
 
 export const Route = createFileRoute("/api/internal/email/process")({
