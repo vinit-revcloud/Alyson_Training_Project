@@ -394,13 +394,8 @@ export async function sendInviteEmail(data: {
   role: string;
   token: string;
 }): Promise<{ ok: boolean; queued: number; error?: string; processed?: number }> {
-  const {
-    enqueueEmail,
-    findNotificationLogByIdempotency,
-    getEmailTemplate,
-    insertNotificationLog,
-    updateNotificationLog,
-  } = await import("@/lib/email/email-db.server");
+  const { getEmailTemplate } = await import("@/lib/email/email-db.server");
+  const { sendTransactionalEmailNow } = await import("@/lib/email/send-transactional.server");
 
   const tpl = await getEmailTemplate("invite_new");
   if (!tpl) {
@@ -425,48 +420,20 @@ export async function sendInviteEmail(data: {
   });
   const today = new Date().toISOString().slice(0, 10);
   const idem = `invite_new:${data.inviteId}:${data.email}:${today}`;
-  const messageId = globalThis.crypto?.randomUUID?.() ?? `${idem}-${Date.now()}`;
 
-  const existing = await findNotificationLogByIdempotency(idem);
-  if (existing) {
-    return { ok: true, queued: 0 };
-  }
-
-  const logId = await insertNotificationLog({
-    template_key: "invite_new",
-    audience: "learner",
-    recipient_email: data.email,
+  const result = await sendTransactionalEmailNow({
+    templateKey: "invite_new",
+    to: data.email,
     subject,
-    status: "pending",
-    idempotency_key: idem,
+    html,
+    idempotencyKey: idem,
   });
 
-  try {
-    await enqueueEmail("transactional_emails", {
-      to: data.email,
-      subject,
-      html,
-      label: "invite_new",
-      message_id: messageId,
-      idempotency_key: idem,
-      queued_at: new Date().toISOString(),
-    });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    await updateNotificationLog(logId, { status: "failed", error: msg });
-    return { ok: false, queued: 0, error: msg };
+  if (result.skipped) {
+    return { ok: true, queued: 0 };
   }
-
-  await updateNotificationLog(logId, { status: "queued", provider_message_id: messageId });
-  let processed = 0;
-  if (process.env.EMAIL_AUTO_PROCESS === "1") {
-    const { processEmailQueue } = await import("@/lib/email/process-queue");
-    try {
-      const result = await processEmailQueue();
-      processed = result.processed;
-    } catch (err) {
-      console.warn("[email] invite dev auto-process failed", err);
-    }
+  if (!result.ok) {
+    return { ok: false, queued: 0, error: result.error };
   }
-  return { ok: true, queued: 1, processed };
+  return { ok: true, queued: 1, processed: 1 };
 }

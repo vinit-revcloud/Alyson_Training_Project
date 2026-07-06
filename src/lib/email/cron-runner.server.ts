@@ -84,7 +84,7 @@ async function processTransactionalEmailQueues(): Promise<{
   return processEmailQueue();
 }
 
-/** Evaluate DB schedules, run due jobs, drain transactional email queue via SES. */
+/** Evaluate DB schedules and drain legacy queue rows. Event emails (invite/assignment/interview) send via SES immediately. */
 export async function runCronTick(): Promise<CronTickResult> {
   const now = new Date();
   const schedules = await loadSchedules();

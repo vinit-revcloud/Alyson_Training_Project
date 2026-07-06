@@ -1,5 +1,6 @@
 import { renderTemplate, type PlaceholderKey } from "@/lib/email/render";
-import { enqueueEmail, getEmailTemplate, insertNotificationLog, updateNotificationLog } from "@/lib/email/email-db.server";
+import { getEmailTemplate } from "@/lib/email/email-db.server";
+import { sendTransactionalEmailNow } from "@/lib/email/send-transactional.server";
 import { getPgPool } from "@/lib/pg.server";
 import { getUserEmail } from "@/lib/user-email";
 import { supabaseAdmin } from "@/integrations/neon/client.server";
@@ -34,42 +35,20 @@ export async function sendInterviewInviteEmail(opts: {
   const { subject, html } = renderTemplate({ subject: tpl.subject, bodyMd: tpl.body_md, vars });
   const today = new Date().toISOString().slice(0, 10);
   const idem = `interview_invite:${opts.sessionId}:${opts.candidateEmail}:${today}`;
-  const messageId = globalThis.crypto?.randomUUID?.() ?? `${idem}-${Date.now()}`;
 
-  const logId = await insertNotificationLog({
-    template_key: "interview_invite",
-    audience: "learner",
-    recipient_email: opts.candidateEmail,
+  const result = await sendTransactionalEmailNow({
+    templateKey: "interview_invite",
+    to: opts.candidateEmail,
     subject,
-    status: "pending",
-    idempotency_key: idem,
+    html,
+    idempotencyKey: idem,
   });
 
-  try {
-    await enqueueEmail("transactional_emails", {
-      to: opts.candidateEmail,
-      subject,
-      html,
-      label: "interview_invite",
-      message_id: messageId,
-      idempotency_key: idem,
-      queued_at: new Date().toISOString(),
-    });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    await updateNotificationLog(logId, { status: "failed", error: msg });
-    return { ok: false, queued: 0, error: msg };
+  if (result.skipped) {
+    return { ok: true, queued: 0 };
   }
-
-  await updateNotificationLog(logId, { status: "queued", provider_message_id: messageId });
-
-  if (process.env.EMAIL_AUTO_PROCESS === "1") {
-    try {
-      const { processEmailQueue } = await import("@/lib/email/process-queue");
-      await processEmailQueue();
-    } catch (e) {
-      console.warn("[email] interview invite auto-process failed", e);
-    }
+  if (!result.ok) {
+    return { ok: false, queued: 0, error: result.error };
   }
   return { ok: true, queued: 1 };
 }

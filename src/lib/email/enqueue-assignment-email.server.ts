@@ -10,6 +10,7 @@ import {
   updateNotificationLog,
 } from "@/lib/email/email-db.server";
 import { renderTemplate, type PlaceholderKey } from "@/lib/email/render";
+import { sendTransactionalEmailNow } from "@/lib/email/send-transactional.server";
 import {
   type AssignmentEmailType,
   type EnqueueAssignmentEmailResult,
@@ -36,8 +37,8 @@ const SES_TEMPLATE_BY_EMAIL_TYPE: Record<AssignmentEmailType, string> = {
 
 const QUEUE_NAME = "transactional_emails";
 
-/** Sent via direct SES drain (cron / EMAIL_AUTO_PROCESS). Step Functions deferred. */
-const TRANSACTIONAL_EMAIL_TYPES = new Set<AssignmentEmailType>(["initial", "retake"]);
+/** Sent immediately via SES. Step Functions reminders use the queue path. */
+const DIRECT_SEND_EMAIL_TYPES = new Set<AssignmentEmailType>(["initial", "retake"]);
 
 export type AssignmentEmailPlaceholders = Partial<Record<PlaceholderKey, string>>;
 
@@ -143,6 +144,7 @@ export async function enqueueAssignmentEmailInDb(
   const templateKey = TEMPLATE_KEY_BY_EMAIL_TYPE[email_type];
   const templateName = SES_TEMPLATE_BY_EMAIL_TYPE[email_type];
   const idempotencyKey = `${email_type}:${assignment_id}:${user_id}`;
+  const useDirectSend = DIRECT_SEND_EMAIL_TYPES.has(email_type);
 
   const existingLog = await findNotificationLogByIdempotency(idempotencyKey);
   if (existingLog) {
@@ -154,14 +156,16 @@ export async function enqueueAssignmentEmailInDb(
     };
   }
 
-  const pendingQueue = await findPendingQueueByAssignmentAndType(assignment_id, email_type);
-  if (pendingQueue) {
-    return {
-      ok: true,
-      queued: false,
-      reason: "duplicate_pending",
-      queueId: pendingQueue.id,
-    };
+  if (!useDirectSend) {
+    const pendingQueue = await findPendingQueueByAssignmentAndType(assignment_id, email_type);
+    if (pendingQueue) {
+      return {
+        ok: true,
+        queued: false,
+        reason: "duplicate_pending",
+        queueId: pendingQueue.id,
+      };
+    }
   }
 
   const tpl = await getEmailTemplate(templateKey);
@@ -174,8 +178,36 @@ export async function enqueueAssignmentEmailInDb(
     bodyMd: tpl.body_md,
     vars: placeholders,
   });
-  const messageId = globalThis.crypto?.randomUUID?.() ?? `${idempotencyKey}-${Date.now()}`;
-  const useTransactionalPath = TRANSACTIONAL_EMAIL_TYPES.has(email_type);
+
+  if (useDirectSend) {
+    const result = await sendTransactionalEmailNow({
+      templateKey,
+      to: recipientEmail,
+      subject,
+      html,
+      idempotencyKey,
+      userId: user_id,
+      assignmentId: assignment_id,
+    });
+
+    if (result.skipped) {
+      return {
+        ok: true,
+        queued: false,
+        reason: "duplicate_logged",
+        notificationLogId: result.notificationLogId,
+      };
+    }
+    if (!result.ok) {
+      return { ok: false, error: result.error ?? "Failed to send assignment email" };
+    }
+    return {
+      ok: true,
+      queued: true,
+      queueId: 0,
+      notificationLogId: result.notificationLogId!,
+    };
+  }
 
   let notificationLogId: string;
   try {
@@ -186,7 +218,7 @@ export async function enqueueAssignmentEmailInDb(
       audience: "learner",
       recipient_email: recipientEmail,
       subject,
-      status: "pending",
+      status: "queued",
       idempotency_key: idempotencyKey,
     });
   } catch (err) {
@@ -203,27 +235,17 @@ export async function enqueueAssignmentEmailInDb(
     return { ok: false, error: message };
   }
 
-  const payload: Record<string, unknown> = useTransactionalPath
-    ? {
-        to: recipientEmail,
-        subject,
-        html,
-        label: templateKey,
-        message_id: messageId,
-        idempotency_key: idempotencyKey,
-        queued_at: new Date().toISOString(),
-      }
-    : {
-        user_id,
-        assignment_id,
-        email_type,
-        template_name: templateName,
-        template_key: templateKey,
-        recipient_email: recipientEmail,
-        placeholders,
-        notification_log_id: notificationLogId,
-        queued_at: new Date().toISOString(),
-      };
+  const payload: Record<string, unknown> = {
+    user_id,
+    assignment_id,
+    email_type,
+    template_name: templateName,
+    template_key: templateKey,
+    recipient_email: recipientEmail,
+    placeholders,
+    notification_log_id: notificationLogId,
+    queued_at: new Date().toISOString(),
+  };
 
   try {
     const queueId = await enqueueEmail(QUEUE_NAME, payload);
@@ -235,25 +257,11 @@ export async function enqueueAssignmentEmailInDb(
       return { ok: false, error: "Failed to enqueue email — no queue id returned" };
     }
 
-    await updateNotificationLog(notificationLogId, {
-      status: "queued",
-      provider_message_id: messageId,
+    await triggerEmailWorkflow({
+      queueId,
+      payload,
+      emailType: email_type,
     });
-
-    if (!useTransactionalPath) {
-      await triggerEmailWorkflow({
-        queueId,
-        payload,
-        emailType: email_type,
-      });
-    } else if (process.env.EMAIL_AUTO_PROCESS === "1") {
-      try {
-        const { processEmailQueue } = await import("@/lib/email/process-queue");
-        await processEmailQueue();
-      } catch (e) {
-        console.warn("[email] assignment dev auto-process failed", e);
-      }
-    }
 
     return { ok: true, queued: true, queueId, notificationLogId };
   } catch (err) {

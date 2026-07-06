@@ -483,7 +483,7 @@ function AutoAssignDialog({ onDone }: { onDone: () => void }) {
       qc.invalidateQueries({ queryKey: ["assignment-metrics"] });
       toast.success(
         `Touched ${res.usersTouched} learner(s) · ${res.assignmentsCreated} assignment(s)` +
-          (res.emailsQueued ? ` · ${res.emailsQueued} email(s) queued` : ""),
+          (res.emailsQueued ? ` · ${res.emailsQueued} email(s) sent` : ""),
       );
       onDone();
     },
